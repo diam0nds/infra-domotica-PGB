@@ -330,6 +330,50 @@ NXDOMAIN è una risposta pulita che dnsmasq inoltra senza filtrarla.
 Scartata l'alternativa di disattivare `rebind_protection`: è una protezione di
 sicurezza reale, e il problema era il formato della risposta, non il controllo.
 
+#### ✅ Esito verificato
+
+Dopo l'inversione dell'ordine in uci, misurato sui contatori reali:
+
+```
+using nameserver 192.168.15.3#53      <- AdGuard ora e' il primo
+using nameserver 1.1.1.1#53
+
+server 192.168.15.3#53: queries sent 27
+server 1.1.1.1#53:      queries sent 0
+```
+
+| Dominio | Risposta via router |
+|---|---|
+| `doubleclick.net` | NXDOMAIN |
+| `google-analytics.com` | NXDOMAIN |
+| `ads.youtube.com` | NXDOMAIN |
+| `github.com` | 140.82.121.4 |
+| `openwrt.org` | 64.226.122.113 |
+
+**Da ~7% a 100% del traffico DNS attraverso AdGuard.** Filtraggio deterministico,
+risoluzione dei domini legittimi intatta.
+
+### Configurazione DNS finale
+
+```
+dhcp.@dnsmasq[0].noresolv    = 1
+dhcp.@dnsmasq[0].strictorder = 1
+dhcp.@dnsmasq[0].server      = '1.1.1.1' '192.168.15.3'   <- ordine INVERTITO
+AdGuard blocking_mode        = nxdomain
+```
+
+⚠️ L'ordine in uci è volutamente invertito rispetto alla priorità desiderata,
+perché dnsmasq costruisce la lista interna al contrario. **Dopo ogni modifica,
+riverificare sui contatori** con `kill -USR1 $(pidof dnsmasq)` e `logread`:
+è un dettaglio implementativo, non un comportamento garantito.
+
+### ⏭️ Non ancora verificato: il fallback
+
+Resta da provare lo scenario che ha originato tutto il lavoro: **con AdGuard
+spento, dnsmasq ripiega davvero su `1.1.1.1`?** Con `strictorder` dovrebbe, ma
+non è stato misurato. Finché non lo è, il comportamento a PVE spento resta
+un'ipotesi.
+
 ## Backup delle configurazioni — operativo
 
 Remote: `diam0nds/infra-domotica-PGB` (privato), via deploy key ed25519.
