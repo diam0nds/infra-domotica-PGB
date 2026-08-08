@@ -115,26 +115,59 @@ Attenzione: dnsmasq interroga gli upstream in parallelo e tiene il più veloce,
 quindi serve configurarlo esplicitamente per non aggirare il filtro in
 condizioni normali.
 
-## Struttura di questo repo
+## Backup delle configurazioni — operativo
+
+Remote: `diam0nds/infra-domotica-PGB` (privato), via deploy key ed25519.
+Cron: `/etc/cron.d/infra-backup`, ogni giorno alle **04:30**.
+Log: `/var/log/infra-backup.log`.
 
 ```
 infra/
-├── README.md          questo file — inventario e architettura
-├── decisions.md       log delle decisioni e del perché
-├── hosts/             config per nodo fisico
-├── guests/            config di VM e container
-└── scripts/           automazioni (backup, sync)
+├── README.md                    in chiaro — inventario e architettura
+├── decisions.md                 in chiaro — log delle decisioni
+├── scripts/
+│   ├── collect-configs.sh       raccolta + commit + push
+│   └── verify-encryption.sh     controllo cifratura (cancello pre-push)
+├── hosts/pve/                   cifrato — /etc/pve, rete, cron, stato
+├── hosts/router-master/         cifrato — vuoto, in attesa di accesso SSH
+├── hosts/router-ap/             cifrato — vuoto, AP non ancora individuato
+└── guests/                      cifrato — def. VM/CT + AdGuardHome.yaml
 ```
 
-## Gestione dei segreti
+### Cosa NON viene raccolto, per scelta
 
-⚠️ **In attesa di decisione dell'utente.**
+`/etc/pve/priv/` e ogni file `*.key` (incluso `/etc/pve/pve-www.key`, che sta
+fuori da `priv/`). Sono chiavi private rigenerabili in pochi minuti: il valore
+di backup è basso, il danno in caso di esposizione è alto.
 
-Le configurazioni da salvare contengono credenziali in chiaro: password WiFi
-in `/etc/config/wireless`, hash in `/etc/shadow`, chiavi in `/etc/pve/priv/`,
-credenziali admin in `AdGuardHome.yaml`.
+### Cifratura — logica fail-safe
 
-Proposta: repo GitHub **privato** + **`git-crypt`** sui percorsi sensibili,
-così su GitHub finisce solo testo cifrato.
+`.gitattributes` cifra **tutto** per default, con un'allowlist esplicita di
+file in chiaro. La logica inversa (elencare cosa cifrare) fallisce in silenzio:
+un file nuovo che non corrisponde a nessun pattern finisce su GitHub in chiaro
+senza generare alcun errore.
 
-**Finché questa decisione non è presa e implementata, non pushare nulla.**
+`collect-configs.sh` **non pusha** se `verify-encryption.sh` non passa. La
+verifica clona il repo senza chiave e controlla che ogni file fuori allowlist
+inizi con l'header `\0GITCRYPT\0`.
+
+⚠️ **Rieseguire `verify-encryption.sh` dopo ogni modifica a `.gitattributes`.**
+
+Verifiche eseguite il 2026-08-08 su clone reale da GitHub: 35 file cifrati,
+6 in chiaro (solo documentazione e script), 0 sorprese, 0 hash o credenziali
+in tutta la history.
+
+### ⚠️ Chiave git-crypt
+
+`/root/git-crypt-infra.key` — **senza, i backup sono illeggibili**. Deve stare
+fuori dalla macchina: se muore la eMMC si perdono insieme macchina e chiave.
+
+## Lacuna aperta: nessun backup delle VM
+
+`/etc/pve/vzdump.cron` è **vuoto**: non esiste alcun backup programmato di VM
+e container. Il repo salva le *configurazioni*, non i dati — la VM Home
+Assistant (32 GB, con storico, automazioni e integrazioni) non ha nessuna
+copia. Se la eMMC cede, si perde tutto.
+
+Da affrontare, tenendo presente che ~14 GB liberi nel volume group non bastano
+per un vzdump completo in locale: serve una destinazione esterna.
