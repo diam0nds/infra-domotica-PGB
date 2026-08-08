@@ -26,7 +26,7 @@ printf '\0GITCRYPT\0' > "$MAGIC_FILE"
 # File che devono restare leggibili — deve combaciare con .gitattributes
 is_allowed_plaintext() {
   case "$1" in
-    .gitattributes|.gitignore|README.md|decisions.md|scripts/*) return 0 ;;
+    .gitattributes|.gitignore|README.md|decisions.md|ROADMAP.md|scripts/*) return 0 ;;
     *) return 1 ;;
   esac
 }

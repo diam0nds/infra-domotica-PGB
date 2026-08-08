@@ -18,4 +18,5 @@
 .gitignore      !filter !diff
 README.md       !filter !diff
 decisions.md    !filter !diff
+ROADMAP.md      !filter !diff
 scripts/**      !filter !diff
