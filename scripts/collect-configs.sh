@@ -122,9 +122,17 @@ if ! "$REPO/scripts/verify-encryption.sh" "$REPO" >/dev/null 2>&1; then
 fi
 log "verifica cifratura superata"
 
-if git push -q origin main 2>/dev/null; then
-  log "pushato su GitHub"
-else
-  log "PUSH FALLITO — il commit resta locale"
-  exit 1
-fi
+# Il push puo' fallire per motivi transitori (blip di rete, hiccup SSH verso
+# GitHub). Senza retry il commit resterebbe locale fino all'esecuzione del
+# giorno dopo, cioe' fino a 24 ore di backup non replicato.
+for try in 1 2 3; do
+  if git push -q origin main 2>/dev/null; then
+    log "pushato su GitHub${try:+ (tentativo $try)}"
+    exit 0
+  fi
+  [ "$try" -lt 3 ] && sleep 10
+done
+
+log "PUSH FALLITO dopo 3 tentativi — il commit resta locale"
+log "verranno inviati alla prossima esecuzione"
+exit 1
