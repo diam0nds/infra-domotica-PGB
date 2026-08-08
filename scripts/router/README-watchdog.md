@@ -8,8 +8,18 @@ riflashato o sostituito, si ridistribuisce da qui: nulla va perso.
 Dal PVE, con `dns-watchdog.sh` presente nel repo:
 
 ```bash
-scp /root/infra/scripts/router/dns-watchdog.sh router-master:/usr/bin/dns-watchdog
-ssh router-master 'chmod +x /usr/bin/dns-watchdog'
+ssh router-master 'cat > /usr/bin/dns-watchdog && chmod +x /usr/bin/dns-watchdog' < /root/infra/scripts/router/dns-watchdog.sh
+```
+
+⚠️ **Non usare `scp`**: OpenWrt monta dropbear, che non fornisce un server
+SFTP, mentre `scp` recente lo pretende e fallisce con
+`/usr/libexec/sftp-server: not found`. La pipe su `cat` richiede solo `cat`
+sul nodo remoto, che c'è sempre.
+
+Verifica dell'integrità del trasferimento:
+
+```bash
+ssh router-master 'wc -l /usr/bin/dns-watchdog; head -1 /usr/bin/dns-watchdog'
 ```
 
 Poi sul router, tre cose in sequenza:
