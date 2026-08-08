@@ -1,11 +1,21 @@
-# --- git-crypt: file cifrati prima del push ---
-secrets/**                      filter=git-crypt diff=git-crypt
-**/wireless                     filter=git-crypt diff=git-crypt
-**/shadow                       filter=git-crypt diff=git-crypt
-**/passwd                       filter=git-crypt diff=git-crypt
-**/AdGuardHome.yaml             filter=git-crypt diff=git-crypt
-**/network                      filter=git-crypt diff=git-crypt
-**/openvpn                      filter=git-crypt diff=git-crypt
-**/wireguard*                   filter=git-crypt diff=git-crypt
-*.key                           filter=git-crypt diff=git-crypt
-*.pem                           filter=git-crypt diff=git-crypt
+# --- git-crypt: logica FAIL-SAFE ---
+#
+# Tutto e' cifrato per default. Le eccezioni in chiaro sono elencate sotto,
+# una per una.
+#
+# Il motivo: la logica inversa (elencare cosa cifrare) fallisce in silenzio.
+# Basta che un file nuovo non corrisponda a nessun pattern e finisce su GitHub
+# in chiaro, senza nessun errore. Cosi' invece un pattern dimenticato produce
+# al massimo un file cifrato di troppo — inutile, ma non dannoso.
+#
+# ATTENZIONE: dopo ogni modifica a questo file, rieseguire la verifica
+# clonando il repo senza chiave. Vedi decisions.md.
+
+* filter=git-crypt diff=git-crypt
+
+# --- eccezioni: documentazione e automazione, volutamente leggibili ---
+.gitattributes  !filter !diff
+.gitignore      !filter !diff
+README.md       !filter !diff
+decisions.md    !filter !diff
+scripts/**      !filter !diff
