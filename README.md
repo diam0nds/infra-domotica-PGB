@@ -18,7 +18,28 @@ Subnet `192.168.15.0/24`, gateway `192.168.15.1`.
 | 192.168.15.101 | `38:8d:3d:89:62:80` | ❓ non identificato — risponde ad ARP, nessuna porta aperta | — |
 | 192.168.15.164 | `dc:03:98:4a:c7:46` | ❓ non identificato — risponde ad ARP, nessuna porta aperta | — |
 
-### AP individuato — 2026-08-08 (aggiornamento)
+## Router AP — SIM SIMAX1800T
+
+OpenWrt **24.10.0** (r28427-6df0e3d02a) — **più recente del master**, che è
+fermo a 21.02.3 fuori supporto. Asimmetria da correggere dal lato sbagliato:
+l'obsoleto è proprio il nodo esposto su internet con WireGuard.
+
+Accesso: `ssh router-ap` (192.168.15.2, chiave `id_ed25519_infra`).
+
+### È un dumb AP puro
+
+| Parametro | Valore |
+|---|---|
+| `network.lan.proto` | `static`, `192.168.15.2`, gw `192.168.15.1` |
+| `network.lan.dns` | **nessuno** |
+| `dhcp.lan.ignore` | `1` — server DHCP **disattivato** |
+| dnsmasq | **non in esecuzione** |
+| radio0 / radio1 | entrambe `mode=ap`, SSID `PGB`, network `lan` |
+
+Non distribuisce né DHCP né DNS: i suoi client ricevono tutto dal master,
+esattamente come qualunque altro dispositivo della LAN. **È trasparente.**
+
+### AP individuato — 2026-08-08 (storico)
 
 L'utente lo ha **cablato su `lan1`** del master (prima quella porta non aveva
 link). Ora è in rete e fa da AP: i suoi client WiFi compaiono sulla porta 1 del
@@ -185,14 +206,36 @@ Tre osservazioni:
 3. **`10.9.0.1` è raggiungibile ma non identificato.** Non appartiene a nessuna
    delle subnet note; da capire cosa sia prima di toccare la configurazione.
 
-Questo però **non spiega** il sintomo riferito dall'utente: con Cloudflare fra
-gli upstream, i client dovrebbero navigare anche a PVE spento. Quindi il
-problema sta probabilmente nella configurazione dell'**AP**, che potrebbe avere
-un proprio DHCP o annunciare AdGuard direttamente. Non verificabile finché
-l'AP non torna in rete.
+### L'AP è stato scagionato — 2026-08-08
 
-⚠️ Non modificare la configurazione DNS prima di aver chiarito i punti 3 e il
-comportamento dell'AP: si rischia di risolvere il sintomo sbagliato.
+Ipotizzavo che i client dell'AP non navigassero perché l'AP annunciava AdGuard
+direttamente o aveva un DHCP proprio. **Falso**: l'AP ha DHCP disattivato e
+nessun dnsmasq, quindi i suoi client seguono lo stesso identico percorso DNS di
+tutti gli altri. Non c'è nulla di specifico dell'AP.
+
+Spiegazione più probabile del sintomo: quando il PVE è spento, `192.168.15.3`
+non rifiuta le query — semplicemente non risponde, e nemmeno l'ARP si risolve.
+dnsmasq attende il timeout prima di ripiegare sugli altri upstream, quindi la
+navigazione non si interrompe ma diventa lentissima. Per chi la usa è
+indistinguibile da "non funziona". Il sintomo riguarda **tutta la casa**, non
+solo l'AP: è lì che è stato notato, non è lì che nasce.
+
+### Correzione proposta (non ancora applicata)
+
+```
+uci delete network... -> rimuovere l'upstream autoreferenziale 192.168.15.1
+uci set dhcp.@dnsmasq[0].strictorder='1'
+server = '192.168.15.3'  '10.9.0.1'  '1.1.1.1'
+          AdGuard         altra casa  fallback pubblico
+```
+
+`strictorder` risolve entrambi i problemi in un colpo: rispetta l'ordine
+dell'elenco, quindi AdGuard viene sempre interrogato per primo — il filtraggio
+diventa deterministico invece di dipendere dalle latenze — e gli altri restano
+come ripiego reale quando è giù.
+
+⚠️ Da valutare: `strictorder` fa attendere il timeout di AdGuard prima di
+ripiegare. Va misurato quanto pesa in pratica prima di considerarla chiusa.
 
 ## Backup delle configurazioni — operativo
 
