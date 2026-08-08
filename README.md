@@ -421,6 +421,47 @@ sempre risolvibile perché senza dipendenze da un singolo upstream.
 numero di domini, quindi partire da liste contenute. E `adblock 4.1.3` è la
 versione di una release EOL: è una soluzione ponte fino all'upgrade di OpenWrt.
 
+### ✅ Soluzione scelta: watchdog DNS sul router
+
+Scartato `adblock` (l'utente ha escluso di caricare il master, che ha 8,4 MB di
+flash e 78 MB di RAM). Adottata invece la soluzione che dà a dnsmasq il
+controllo di salute che gli manca:
+
+`scripts/router/dns-watchdog.sh` verifica ogni minuto se AdGuard risponde e
+riscrive di conseguenza la lista degli upstream in `/tmp/dnsmasq-upstreams`,
+che dnsmasq rilegge a ogni SIGHUP — senza riavvii e **senza scritture sulla
+flash**, che su questi router è un bene di consumo.
+
+| Situazione | Upstream | Filtraggio |
+|---|---|---|
+| AdGuard risponde | `192.168.15.3` | attivo |
+| Muto da 2 verifiche (~2 min) | `1.1.1.1` | sospeso |
+| AdGuard torna | `192.168.15.3` | riattivato |
+| Router appena riavviato | `1.1.1.1` | sospeso |
+
+Finestra di disservizio ridotta da **8-14 giorni a circa 2 minuti**.
+
+Installazione e ripristino: `scripts/router/README-watchdog.md`.
+
+### Il backup dei router era incompleto — corretto il 2026-08-08
+
+Domanda dell'utente: *"in caso di ripristino del sistema poi perdiamo tutto?"*
+Con il backup di allora, **sì**.
+
+`collect-configs.sh` raccoglieva dai router **solo `/etc/config`**. Restavano
+fuori lo script del watchdog (`/usr/bin`), il suo cron (`/etc/crontabs/root`),
+il richiamo all'avvio (`/etc/rc.local`), la chiave SSH
+(`/etc/dropbear/authorized_keys`), `sysupgrade.conf` e l'elenco dei pacchetti
+installati. Dopo un riflash si sarebbe ripristinata la configurazione ma perso
+tutto il resto — inclusa la chiave con cui accedo ai nodi.
+
+Ora vengono raccolti anche quei percorsi, più `opkg list-installed` e modello/
+firmware/target di ciascun nodo, cioè quanto serve a ricostruire un router da
+firmware vergine.
+
+**La fonte di verità è il repo, non il router.** Lo script si ridistribuisce
+da git; il router ne ha solo una copia operativa.
+
 ## Backup delle configurazioni — operativo
 
 Remote: `diam0nds/infra-domotica-PGB` (privato), via deploy key ed25519.
