@@ -11,6 +11,12 @@
 
 set -uo pipefail
 
+# Locale fisso: senza questo l'output di alcuni comandi cambia a seconda
+# dell'ambiente (lsblk disegna l'albero in Unicode da shell interattiva e in
+# ASCII sotto cron), producendo diff fasulli e un commit al giorno a vuoto.
+export LC_ALL=C
+export LANG=C
+
 REPO=/root/infra
 PVE="$REPO/hosts/pve"
 STATE="$PVE/state"
@@ -46,7 +52,7 @@ done
 # contatori, altrimenti ogni esecuzione produrrebbe un commit fasullo.
 log "host pve: stato strutturale"
 pveversion -v                                        > "$STATE/pveversion.txt" 2>/dev/null
-lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT            > "$STATE/lsblk.txt"      2>/dev/null
+lsblk --ascii -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT    > "$STATE/lsblk.txt"      2>/dev/null
 lvs -o lv_name,vg_name,lv_size,lv_attr --units g     > "$STATE/lvs.txt"        2>/dev/null
 vgs -o vg_name,vg_size,vg_free --units g             > "$STATE/vgs.txt"        2>/dev/null
 dpkg --get-selections                                > "$STATE/packages.txt"   2>/dev/null
