@@ -462,6 +462,25 @@ firmware vergine.
 **La fonte di verità è il repo, non il router.** Lo script si ridistribuisce
 da git; il router ne ha solo una copia operativa.
 
+## Alias SSH — `router-master` e `router-ap`
+
+Definiti in `/root/.ssh/config` **sul PVE**. Non sono nomi di rete: non
+esistono né in DNS né in `/etc/hosts`.
+
+| | |
+|---|---|
+| Funzionano con | `ssh`, `scp`, `rsync` |
+| **Non** funzionano con | `ping`, `curl`, browser |
+| Da dove | **solo dal PVE**, **solo come root** |
+
+Equivalenti estesi: `ssh -i /root/.ssh/id_ed25519_infra root@192.168.15.1`
+(master) e `...@192.168.15.2` (AP). Da un'altra macchina non esistono, e
+servirebbe comunque la chiave privata, che sta solo sul PVE.
+
+`collect-configs.sh` usa questi alias: se vengono rinominati o rimossi, la
+raccolta dai router smette di funzionare silenziosamente (il nodo risulta
+"NON raggiungibile via SSH" e viene saltato senza far fallire lo script).
+
 ## Backup delle configurazioni — operativo
 
 Remote: `diam0nds/infra-domotica-PGB` (privato), via deploy key ed25519.
