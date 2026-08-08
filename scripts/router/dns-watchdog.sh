@@ -49,7 +49,21 @@ fi
 
 # ---------------------------------------------------------------------------
 
-if timeout 4 nslookup "$PROBE" "$ADGUARD" >/dev/null 2>&1; then
+# ATTENZIONE, due trappole di BusyBox verificate sul campo il 2026-08-08:
+#
+#   1. `timeout` NON esiste in questa BusyBox (exit 127). Non usarlo.
+#      Non serve comunque: nslookup ha un timeout proprio di ~5 secondi,
+#      compatibile con un cron al minuto.
+#
+#   2. `nslookup` restituisce **exit 0 anche quando il server e' morto**.
+#      Verificare $? non rileva nulla. L'unico discriminatore affidabile e'
+#      l'output:
+#         vivo  -> contiene "Name:" e "Address 1:"
+#         morto -> ";; connection timed out; no servers could be reached"
+#
+# Per questo si filtra l'output invece di controllare il codice di uscita.
+
+if nslookup "$PROBE" "$ADGUARD" 2>/dev/null | grep -q '^Name:'; then
   FALLIMENTI=0
   if [ "$STATO" != "attivo" ]; then
     imposta_upstream "$ADGUARD"
