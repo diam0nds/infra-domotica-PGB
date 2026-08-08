@@ -18,7 +18,33 @@ Subnet `192.168.15.0/24`, gateway `192.168.15.1`.
 | 192.168.15.101 | `38:8d:3d:89:62:80` | ❓ non identificato — risponde ad ARP, nessuna porta aperta | — |
 | 192.168.15.164 | `dc:03:98:4a:c7:46` | ❓ non identificato — risponde ad ARP, nessuna porta aperta | — |
 
-### Il secondo router non è collegato a nulla — 2026-08-08
+### AP individuato — 2026-08-08 (aggiornamento)
+
+L'utente lo ha **cablato su `lan1`** del master (prima quella porta non aveva
+link). Ora è in rete e fa da AP: i suoi client WiFi compaiono sulla porta 1 del
+bridge del master.
+
+**Non ha alcun IPv4 raggiungibile.** Nessun lease DHCP, e sonde su
+`192.168.0/1/2/31.x`, `10.0.0.x`, `172.16.0.x` non danno risposta. Si raggiunge
+però via **IPv6 link-local**:
+
+```
+fe80::c43b:93ff:fe7d:4dbf   (MAC c6:3b:93:7d:4d:bf)
+porte 22, 80, 443 aperte — OpenWrt con LuCI
+```
+
+Dal PVE: `ssh root@fe80::c43b:93ff:fe7d:4dbf%vmbr0`
+
+⚠️ La chiave `id_ed25519_infra` **non è ancora autorizzata su questo nodo**:
+era stata aggiunta solo al master. Finché non lo è, `collect-configs.sh` non
+può raccoglierne la configurazione.
+
+Da fare: assegnargli un IPv4 statico nella LAN (es. `192.168.15.2`) — un nodo
+gestibile solo via link-local è fragile e scomodo. Nota anche che, essendo ora
+cablato, il backhaul mesh è ridondante: si potrebbe disattivare `radio0` in
+modalità mesh e guadagnarne in stabilità.
+
+### Storico: perché prima non si trovava — 2026-08-08
 
 **Risolto**: l'AP è acceso ma **non è connesso alla rete**, per questo non si
 trova. Non è un problema di indirizzamento.
