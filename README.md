@@ -220,22 +220,63 @@ navigazione non si interrompe ma diventa lentissima. Per chi la usa è
 indistinguibile da "non funziona". Il sintomo riguarda **tutta la casa**, non
 solo l'AP: è lì che è stato notato, non è lì che nasce.
 
+### Misurazione reale — 2026-08-08
+
+Statistiche estratte da dnsmasq con `kill -USR1`, cioè contatori veri, non stime:
+
+| Upstream | Query inviate | Quota | Fallite |
+|---|---:|---:|---:|
+| `1.1.1.1` | 16.052 | 36% | 1 |
+| `fe80::1%wan` (router ISP, IPv6) | 13.476 | 30% | 471 |
+| `8.8.8.8` | 8.880 | 20% | 31 |
+| **`192.168.15.3` (AdGuard)** | **3.264** | **7%** | 18 |
+| `10.9.0.1` | 2.933 | 7% | 0 |
+
+Totale query inoltrate: 29.496 (più 16.590 servite da cache).
+
+**AdGuard vede meno di una query su dieci.** Il filtraggio che si crede attivo
+è in gran parte aggirato: oltre l'85% del traffico DNS esce verso resolver
+pubblici o verso il router del provider, senza passare da nessun filtro.
+
+### Le tre cause
+
+1. **`noresolv` non impostato.** dnsmasq usa gli upstream di `uci` **più**
+   quelli forniti dalla WAN in `/tmp/resolv.conf.d/resolv.conf.auto`
+   (`1.1.1.1`, `8.8.8.8`, `fe80::1%wan`). Da 4 upstream configurati se ne
+   ritrovano 6 attivi, tre dei quali nessuno ha scelto deliberatamente.
+2. **`strictorder` non impostato.** Senza, dnsmasq converge sul più veloce. Un
+   resolver anycast pubblico batte quasi sempre un container su eMMC.
+3. **`10.9.0.1` non è un server DNS.** Risponde al ping (14,7 ms via tunnel) ma
+   **non risponde mai** alle query — verificato due volte. Sono 2.933 query
+   buttate in attese inutili.
+
+Da notare: `192.168.15.1` nella lista è il router stesso, un upstream
+autoreferenziale.
+
+Lato client va invece tutto bene: nessun `dhcp_option 6`, quindi i client
+ricevono il router come DNS, e anche via IPv6 (`ra=server`, `dhcpv6=server`)
+viene annunciato il router. Nessun bypass diretto dai client.
+
+AdGuard risolve per conto proprio via DoH verso `dns10.quad9.net` con bootstrap
+Quad9: non dipende dal router, quindi non c'è rischio di dipendenza circolare.
+
 ### Correzione proposta (non ancora applicata)
 
-```
-uci delete network... -> rimuovere l'upstream autoreferenziale 192.168.15.1
-uci set dhcp.@dnsmasq[0].strictorder='1'
-server = '192.168.15.3'  '10.9.0.1'  '1.1.1.1'
-          AdGuard         altra casa  fallback pubblico
+```sh
+uci set dhcp.@dnsmasq[0].noresolv='1'       # ignora i DNS imposti dalla WAN
+uci set dhcp.@dnsmasq[0].strictorder='1'    # rispetta l'ordine della lista
+uci -q delete dhcp.@dnsmasq[0].server       # ripulisce i 4 attuali
+uci add_list dhcp.@dnsmasq[0].server='192.168.15.3'   # AdGuard, primo
+uci add_list dhcp.@dnsmasq[0].server='1.1.1.1'        # ripiego reale
+uci commit dhcp
+/etc/init.d/dnsmasq restart
 ```
 
-`strictorder` risolve entrambi i problemi in un colpo: rispetta l'ordine
-dell'elenco, quindi AdGuard viene sempre interrogato per primo — il filtraggio
-diventa deterministico invece di dipendere dalle latenze — e gli altri restano
-come ripiego reale quando è giù.
-
-⚠️ Da valutare: `strictorder` fa attendere il timeout di AdGuard prima di
-ripiegare. Va misurato quanto pesa in pratica prima di considerarla chiusa.
+⚠️ Con `strictorder`, a PVE spento ogni query attende il timeout di AdGuard
+prima di ripiegare: il filtraggio diventa deterministico, ma la lentezza nello
+scenario di guasto va **misurata**, non data per risolta. Se pesa troppo, si
+abbassa il timeout di dnsmasq o si valuta il pacchetto `adblock` sul router
+come secondo livello indipendente dal PVE.
 
 ## Backup delle configurazioni — operativo
 
