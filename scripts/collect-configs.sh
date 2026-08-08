@@ -79,7 +79,7 @@ fi
 # ---------------------------------------------------------------- routers
 # Richiedono la chiave ed25519 autorizzata sul nodo. Finche' non c'e',
 # il passo viene saltato senza far fallire la raccolta.
-for node in router-master; do
+for node in router-master router-ap; do
   dest="$REPO/hosts/$node"
   mkdir -p "$dest"
   if ssh -o BatchMode=yes -o ConnectTimeout=5 "$node" true 2>/dev/null; then
