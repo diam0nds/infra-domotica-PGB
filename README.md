@@ -18,24 +18,54 @@ Subnet `192.168.15.0/24`, gateway `192.168.15.1`.
 | 192.168.15.101 | `38:8d:3d:89:62:80` | ❓ non identificato — risponde ad ARP, nessuna porta aperta | — |
 | 192.168.15.164 | `dc:03:98:4a:c7:46` | ❓ non identificato — risponde ad ARP, nessuna porta aperta | — |
 
-### Ricerca del secondo router (AP WiFi) — 2026-08-08
+### Il secondo router non è collegato a nulla — 2026-08-08
 
-Acceso dall'utente ma **non rintracciabile** su `192.168.15.0/24`.
+**Risolto**: l'AP è acceso ma **non è connesso alla rete**, per questo non si
+trova. Non è un problema di indirizzamento.
 
-Fatto finora: ping sweep completo del /24, probe TCP (22/80/443) sui candidati,
-cattura passiva ARP/DHCP di 45s (nessun traffico), lettura della FDB del bridge.
+Il master ha `radio0` in modalità **mesh 802.11s** (`mesh_id='my-mesh'`,
+encryption `sae`, canale 1, HT20, banda 2.4 GHz): è così che il secondo nodo
+dovrebbe agganciarsi. Ma `iw dev wlan0 station dump` riporta **0 peer** e
+`mpath dump` nessun percorso. Il mesh è vuoto.
 
-Risultato: nella FDB compare `c6:c2:98:88:b7:77` su `enp1s0` — **un MAC attivo
-sul segmento fisico senza alcun IP nella nostra subnet**. È il candidato più
-probabile, ma il bit locally-administered è settato, quindi potrebbe anche
-essere uno smartphone con MAC randomizzato.
+`192.168.15.102` (MAC `c6:c2:98:88:b7:77`) ha un lease DHCP e una voce ARP sul
+master, ma non risponde al ping **nemmeno dal router stesso**: è residuo di una
+sessione precedente, non un dispositivo vivo.
 
-**Ipotesi principale**: l'AP ha un IP fuori subnet, verosimilmente il default
-OpenWrt `192.168.1.1`, quindi irraggiungibile da qui.
+Da verificare lato AP: se sia cablato (e su quale porta) o se debba agganciarsi
+via mesh, e in quest'ultimo caso se `mesh_id`, cifratura SAE e canale
+corrispondano a quelli del master.
 
-**Prossimo passo**: leggere i lease DHCP e la config wireless dal router master,
-una volta ottenuto l'accesso SSH. In alternativa, IP alias temporaneo su
-`192.168.1.0/24` per sondare `192.168.1.1` (additivo e reversibile).
+## Router master — Xiaomi Mi Router 4A Gigabit
+
+OpenWrt **21.02.3** (r16554-1d4dea6d4f). ⚠️ Versione **fuori supporto**: la
+serie 21.02 non riceve più aggiornamenti di sicurezza. Da pianificare un
+upgrade, tenendo conto che è il gateway di un sito remoto — un aggiornamento
+andato male non è recuperabile senza presenza fisica.
+
+### Topologia di rete
+
+| Rete | Subnet | Interfaccia | Contenuto |
+|---|---|---|---|
+| WAN | `192.168.51.2/24` → gw `.51.1` | `wan` | **Doppio NAT**: c'è un router del provider a monte |
+| LAN | `192.168.15.0/24` | `br-lan` (lan1, lan2) | PVE, HAOS, AdGuard, PC, telefoni |
+| IoT | `192.168.16.0/24` | `wlan0-2` | **Tutta la domotica**: Shelly, Midea, Sonoff, termostato, robot |
+| GUEST | `10.10.15.0/24` | — | rete ospiti |
+| VPN client | `192.168.9.0/24` | `wg0` | WireGuard road-warrior, 3 peer |
+| VPN sito | `10.10.10.2/32` → `192.168.10.0/24` | `wg_site_sbt` | **Tunnel site-to-site già attivo** verso l'altra casa |
+
+**Il collegamento fra le due case esiste già**: un tunnel WireGuard verso un
+endpoint DDNS Synology (nel config cifrato) instrada `192.168.10.0/24`. Da
+tenere presente quando si progetterà l'integrazione delle due domotiche.
+
+### WiFi
+
+| SSID | Banda | Rete | Note |
+|---|---|---|---|
+| `PGB` | 5 GHz | lan | |
+| `PGB-G` | 2.4 GHz | lan | la variante 5 GHz è disabilitata |
+| `PGB-IoT` | 2.4 GHz | IoT | 17 dispositivi collegati |
+| — | 2.4 GHz | lan | mesh 802.11s, `mesh_id='my-mesh'`, **0 peer** |
 
 ## Host: `pve`
 
@@ -103,17 +133,40 @@ Questo si **somma** al problema dell'alimentazione: il PVE resta spento
 8-14 giorni dopo un blackout, e in tutto quel periodo la casa è senza DNS.
 Non è un disservizio di pochi minuti.
 
-⚠️ Da mettere in sicurezza. Progettazione da fare **dopo** aver letto le
-configurazioni reali dei due router (chi distribuisce DHCP, quale DNS viene
-annunciato ai client, se l'AP fa DHCP per conto suo).
+### Com'è configurato davvero — letto il 2026-08-08
 
-Direzione proposta, da validare sulle config: i client ricevono come DNS
-**il router master** (sempre acceso) invece di AdGuard direttamente; il router
-inoltra ad AdGuard come upstream e ripiega su un resolver pubblico se AdGuard
-non risponde. Si perde il filtraggio durante il guasto, ma la casa naviga.
-Attenzione: dnsmasq interroga gli upstream in parallelo e tiene il più veloce,
-quindi serve configurarlo esplicitamente per non aggirare il filtro in
-condizioni normali.
+Nessuna interfaccia imposta `dhcp_option 6`, quindi **i client ricevono come
+DNS il router stesso** (`192.168.15.1`), non AdGuard direttamente. Vale per
+lan, IoT e GUEST.
+
+Il dnsmasq del router ha **quattro upstream**:
+
+```
+dhcp.@dnsmasq[0].server = '192.168.15.3' '192.168.15.1' '1.1.1.1' '10.9.0.1'
+                           AdGuard        sé stesso      Cloudflare  ?
+```
+
+Con `strictorder` e `allservers` **entrambi non impostati**.
+
+Tre osservazioni:
+
+1. **Il filtraggio non è garantito.** Senza `strictorder`, dnsmasq non rispetta
+   l'ordine dell'elenco: converge sull'upstream che risponde prima. Con
+   Cloudflare fra le opzioni, una quota di query aggira AdGuard — quanta,
+   dipende dalle latenze del momento. Il filtro c'è, ma non è deterministico.
+2. **`192.168.15.1` è sé stesso.** Un upstream autoreferenziale: nel migliore
+   dei casi inutile, nel peggiore un anello.
+3. **`10.9.0.1` è raggiungibile ma non identificato.** Non appartiene a nessuna
+   delle subnet note; da capire cosa sia prima di toccare la configurazione.
+
+Questo però **non spiega** il sintomo riferito dall'utente: con Cloudflare fra
+gli upstream, i client dovrebbero navigare anche a PVE spento. Quindi il
+problema sta probabilmente nella configurazione dell'**AP**, che potrebbe avere
+un proprio DHCP o annunciare AdGuard direttamente. Non verificabile finché
+l'AP non torna in rete.
+
+⚠️ Non modificare la configurazione DNS prima di aver chiarito i punti 3 e il
+comportamento dell'AP: si rischia di risolvere il sintomo sbagliato.
 
 ## Backup delle configurazioni — operativo
 

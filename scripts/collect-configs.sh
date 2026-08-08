@@ -87,7 +87,8 @@ for node in router-master; do
     rm -rf "$dest/etc"; mkdir -p "$dest/etc/config"
     ssh -o BatchMode=yes "$node" 'tar -C /etc -cf - config' 2>/dev/null \
       | tar -C "$dest/etc" -xf - 2>/dev/null
-    ssh -o BatchMode=yes "$node" 'cat /etc/dhcp.leases' \
+    # su OpenWrt il file dei lease sta in /tmp, non in /etc
+    ssh -o BatchMode=yes "$node" 'cat /tmp/dhcp.leases' \
       > "$dest/dhcp.leases" 2>/dev/null
   else
     log "$node: NON raggiungibile via SSH, saltato"
