@@ -367,12 +367,59 @@ perché dnsmasq costruisce la lista interna al contrario. **Dopo ogni modifica,
 riverificare sui contatori** con `kill -USR1 $(pidof dnsmasq)` e `logread`:
 è un dettaglio implementativo, non un comportamento garantito.
 
-### ⏭️ Non ancora verificato: il fallback
+### ❌ Il fallback NON funziona — misurato il 2026-08-08
 
-Resta da provare lo scenario che ha originato tutto il lavoro: **con AdGuard
-spento, dnsmasq ripiega davvero su `1.1.1.1`?** Con `strictorder` dovrebbe, ma
-non è stato misurato. Finché non lo è, il comportamento a PVE spento resta
-un'ipotesi.
+Test controllato: container AdGuard fermato, 5 query verso il router.
+
+| Fase | Esito |
+|---|---|
+| Baseline (AdGuard attivo) | 3/3 risolte, 51-112 ms |
+| AdGuard spento | **0/5 risolte, tutte in timeout** |
+| Domini bloccati | timeout |
+| Dopo riavvio container | tutto ripristinato |
+
+**Con `strictorder` attivo, se AdGuard non risponde il DNS della casa si ferma
+del tutto.** Non ripiega su `1.1.1.1`.
+
+Motivo: a container spento la veth sparisce, i pacchetti verso `192.168.15.3`
+vengono scartati senza alcun errore ICMP. dnsmasq resta in attesa, e con
+`strict-order` non passa al server successivo abbastanza in fretta per nessun
+timeout lato client.
+
+### ⚠️ Il compromesso, ora quantificato
+
+| Configurazione | Filtraggio | DNS a PVE spento |
+|---|---|---|
+| Prima (nessuna opzione) | ~7% delle query | funziona, lento |
+| Ora (`strictorder`) | 100% | **fermo del tutto** |
+
+Per un sito remoto e non presidiato questa è una **regressione di resilienza**:
+si è scambiata una navigazione lenta con l'assenza totale di DNS per gli 8-14
+giorni in cui il PVE resta giù. Da risolvere, non da lasciare così.
+
+### Soluzione strutturale: `adblock` sul router
+
+Verificata la fattibilità sul master:
+
+| Risorsa | Valore |
+|---|---|
+| RAM | 119 MB totali, 78 liberi |
+| Flash `/overlay` | 8,4 MB liberi |
+| `/tmp` (liste in RAM) | 59 MB liberi |
+| Pacchetto | `adblock 4.1.3-9`, 21 KB + dipendenze leggere |
+| Repository 21.02.3 | **ancora attivi**, `opkg update` e firma OK |
+
+`adblock` inietta le blocklist **dentro dnsmasq**: i domini bloccati vengono
+risolti localmente e non raggiungono nessun upstream. Questo separa il
+filtraggio dagli upstream, e permette di **rimuovere `strictorder`** — dnsmasq
+torna a ripiegare liberamente fra i resolver, quindi resiliente.
+
+Risultato: filtraggio sempre attivo perché locale sul nodo sempre acceso, e DNS
+sempre risolvibile perché senza dipendenze da un singolo upstream.
+
+⚠️ Da tenere presente: le liste consumano RAM sul router in proporzione al
+numero di domini, quindi partire da liste contenute. E `adblock 4.1.3` è la
+versione di una release EOL: è una soluzione ponte fino all'upgrade di OpenWrt.
 
 ## Backup delle configurazioni — operativo
 
