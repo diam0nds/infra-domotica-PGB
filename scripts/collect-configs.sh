@@ -83,13 +83,39 @@ for node in router-master router-ap; do
   dest="$REPO/hosts/$node"
   mkdir -p "$dest"
   if ssh -o BatchMode=yes -o ConnectTimeout=5 "$node" true 2>/dev/null; then
-    log "$node: raccolgo /etc/config"
-    rm -rf "$dest/etc"; mkdir -p "$dest/etc/config"
-    ssh -o BatchMode=yes "$node" 'tar -C /etc -cf - config' 2>/dev/null \
-      | tar -C "$dest/etc" -xf - 2>/dev/null
+    log "$node: raccolgo configurazioni"
+    rm -rf "$dest/etc" "$dest/usr"; mkdir -p "$dest"
+
+    # NON basta /etc/config. Su OpenWrt le cose che servono a ricostruire un
+    # nodo da firmware vergine stanno sparse: il cron in /etc/crontabs, gli
+    # script custom in /usr/bin, la chiave SSH in /etc/dropbear, l'elenco dei
+    # file da preservare in /etc/sysupgrade.conf. Raccogliendo solo
+    # /etc/config si perderebbe tutto questo senza accorgersene.
+    ssh -o BatchMode=yes "$node" '
+      cd / || exit 1
+      L=""
+      for f in etc/config etc/crontabs etc/rc.local etc/sysupgrade.conf \
+               etc/firewall.user etc/dropbear/authorized_keys \
+               usr/bin/dns-watchdog; do
+        [ -e "$f" ] && L="$L $f"
+      done
+      [ -n "$L" ] && tar -cf - $L
+    ' 2>/dev/null | tar -C "$dest" -xf - 2>/dev/null
+
     # su OpenWrt il file dei lease sta in /tmp, non in /etc
     ssh -o BatchMode=yes "$node" 'cat /tmp/dhcp.leases' \
       > "$dest/dhcp.leases" 2>/dev/null
+
+    # elenco pacchetti: senza, dopo un riflash non si sa cosa reinstallare
+    ssh -o BatchMode=yes "$node" 'opkg list-installed' \
+      > "$dest/pacchetti-installati.txt" 2>/dev/null
+
+    # versione e modello, per sapere quale firmware rimettere
+    ssh -o BatchMode=yes "$node" '
+      echo "modello:  $(cat /tmp/sysinfo/model 2>/dev/null)"
+      echo "firmware: $(grep DISTRIB_DESCRIPTION /etc/openwrt_release 2>/dev/null | cut -d= -f2)"
+      echo "target:   $(grep DISTRIB_TARGET /etc/openwrt_release 2>/dev/null | cut -d= -f2)"
+    ' > "$dest/sistema.txt" 2>/dev/null
   else
     log "$node: NON raggiungibile via SSH, saltato"
   fi
