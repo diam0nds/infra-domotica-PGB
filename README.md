@@ -278,6 +278,58 @@ scenario di guasto va **misurata**, non data per risolta. Se pesa troppo, si
 abbassa il timeout di dnsmasq o si valuta il pacchetto `adblock` sul router
 come secondo livello indipendente dal PVE.
 
+### Applicata la correzione — e sono emersi due difetti — 2026-08-08
+
+`noresolv` e `strictorder` sono stati applicati, la lista ridotta ad AdGuard +
+Cloudflare. Il DNS ha continuato a funzionare, ma **il filtro non filtrava
+ancora**. Misurando invece di assumere sono emersi due problemi distinti.
+
+#### 1. dnsmasq inverte l'ordine dei server
+
+Il file generato ha l'ordine giusto:
+
+```
+server=192.168.15.3      <- AdGuard, primo
+server=1.1.1.1
+```
+
+ma il log di avvio rivela la lista interna:
+
+```
+using nameserver 1.1.1.1#53          <- dnsmasq lo mette per primo
+using nameserver 192.168.15.3#53
+```
+
+Con `strictorder` interroga sempre il primo della **lista interna**, ottiene
+risposta, e ad AdGuard non arriva nulla. Contatori dopo la modifica:
+
+```
+server 1.1.1.1#53:      queries sent 113
+server 192.168.15.3#53: queries sent 0     <- zero
+```
+
+**Rimedio**: invertire l'ordine in uci, così la lista interna risulta corretta.
+È un dettaglio implementativo di dnsmasq, quindi **va verificato sui contatori
+dopo ogni modifica**, non dato per acquisito.
+
+#### 2. `rebind_protection` scartava i blocchi di AdGuard
+
+```
+possible DNS-rebind attack detected: doubleclick.net
+DNS rebinding protection is active, will discard upstream RFC1918 responses!
+```
+
+AdGuard bloccava restituendo `0.0.0.0`, e dnsmasq lo scambiava per un attacco
+di DNS rebinding scartando la risposta. Ecco perché, prima della modifica, il
+router restituiva risposte vuote sui domini bloccati.
+
+**Rimedio applicato**: `blocking_mode` di AdGuard portato da `default` a
+`nxdomain` (backup in `AdGuardHome.yaml.pre-nxdomain` dentro il container).
+NXDOMAIN è una risposta pulita che dnsmasq inoltra senza filtrarla.
+
+Scartata l'alternativa di disattivare `rebind_protection`: è una protezione di
+sicurezza reale, e il problema era il formato della risposta, non il controllo.
+
 ## Backup delle configurazioni — operativo
 
 Remote: `diam0nds/infra-domotica-PGB` (privato), via deploy key ed25519.
