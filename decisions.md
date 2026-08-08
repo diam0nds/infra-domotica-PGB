@@ -47,9 +47,48 @@ qualcosa di leggero e parco in scrittura.
 
 ## 2026-08-08 — Backup config su GitHub: solo cifrato
 
-**Stato**: ⏳ proposto, in attesa di conferma dell'utente.
+**Stato**: ✅ approvato e implementato.
 
-**Proposta**: repo GitHub **privato** + `git-crypt` sui file sensibili.
+**Implementazione**: repo GitHub privato `diam0nds/infra-domotica-PGB` +
+`git-crypt` sui percorsi elencati in `.gitattributes`.
+
+Accesso via **deploy key** ed25519 dedicata (`/root/.ssh/id_ed25519_github`),
+alias SSH `github-infra`. Scelta al posto di un PAT perché è limitata al
+singolo repository e non scade, quindi il cron non si rompe alla scadenza.
+
+Chiavi separate per scopo — se una trapela non compromette le altre:
+
+| Chiave | Uso |
+|---|---|
+| `id_ed25519_github` | solo push su questo repo |
+| `id_ed25519_infra` | solo nodi OpenWrt |
+| `id_rsa` | preesistente, cluster Proxmox — non riusata |
+
+Host key di github.com installate in `known_hosts` con fingerprint verificati
+contro quelli pubblicati da GitHub (ED25519 e RSA, entrambi corrispondenti):
+niente TOFU cieco al primo collegamento.
+
+### Verifica della cifratura — eseguita, non assunta
+
+Prima di pushare qualsiasi configurazione reale è stato committato un file
+`secrets/canary.txt` con un valore fittizio riconoscibile, poi clonato il repo
+da GitHub **senza** la chiave git-crypt. Risultato:
+
+- il valore in chiaro **non** compare nel clone
+- il file risulta binario, con header `\0GITCRYPT\0`
+- zero occorrenze del valore in tutta la history (`git log --all -p`)
+- i file non sensibili (README, decisions) restano leggibili in chiaro
+
+Il canary resta nel repo come artefatto di prova: contiene solo un valore
+fittizio. **Ripetere questa verifica dopo ogni modifica a `.gitattributes`** —
+git-crypt cifra solo ciò che il pattern intercetta, e un pattern sbagliato
+fallisce in silenzio, pushando segreti in chiaro senza alcun errore.
+
+### ⚠️ Chiave git-crypt
+
+Esportata in `/root/git-crypt-infra.key`. **Senza quel file i backup sono
+illeggibili.** Deve stare fuori dalla macchina (password manager): se muore la
+eMMC si perdono insieme la macchina e la chiave, e il repo diventa inutile.
 
 **Motivo**: le configurazioni contengono password WiFi in chiaro, hash di
 root, chiavi private del cluster Proxmox e credenziali AdGuard. Un push su
