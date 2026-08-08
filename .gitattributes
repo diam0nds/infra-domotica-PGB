@@ -1,0 +1,11 @@
+# --- git-crypt: file cifrati prima del push ---
+secrets/**                      filter=git-crypt diff=git-crypt
+**/wireless                     filter=git-crypt diff=git-crypt
+**/shadow                       filter=git-crypt diff=git-crypt
+**/passwd                       filter=git-crypt diff=git-crypt
+**/AdGuardHome.yaml             filter=git-crypt diff=git-crypt
+**/network                      filter=git-crypt diff=git-crypt
+**/openvpn                      filter=git-crypt diff=git-crypt
+**/wireguard*                   filter=git-crypt diff=git-crypt
+*.key                           filter=git-crypt diff=git-crypt
+*.pem                           filter=git-crypt diff=git-crypt
