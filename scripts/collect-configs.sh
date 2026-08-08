@@ -105,6 +105,16 @@ if [ "${SKIP_PUSH:-0}" = "1" ]; then
   exit 0
 fi
 
+# Cancello di sicurezza: se anche un solo file che doveva essere cifrato non lo
+# e', il push non parte. Meglio un backup mancato che segreti in chiaro su
+# GitHub — da li' non si torna indietro, restano nella history.
+if ! "$REPO/scripts/verify-encryption.sh" "$REPO" >/dev/null 2>&1; then
+  log "VERIFICA CIFRATURA FALLITA — push bloccato"
+  log "esegui scripts/verify-encryption.sh per vedere quali file"
+  exit 1
+fi
+log "verifica cifratura superata"
+
 if git push -q origin main 2>/dev/null; then
   log "pushato su GitHub"
 else
