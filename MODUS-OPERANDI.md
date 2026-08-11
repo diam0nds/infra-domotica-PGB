@@ -173,10 +173,28 @@ rimasti giù 4 minuti.
 **Rimedio**: `option macaddr='<BSSID attuale>'` sulle interfacce che servono
 dispositivi sensibili, **prima** di modificare la struttura della radio.
 
-**Corollario**: la reazione a un cambio di BSSID dipende dal produttore e non è
-prevedibile a priori. Va misurata la lista dei client *prima* e *dopo* ogni
-reload, confrontando i **nomi** e non solo il conteggio — un conteggio uguale
-può nascondere dispositivi diversi.
+**Corollario**: va misurata la lista dei client *prima* e *dopo* ogni reload,
+confrontando i **nomi** e non solo il conteggio — un conteggio uguale può
+nascondere dispositivi diversi. Strumento: `scripts/wifi-clients.sh`, pensato
+per essere confrontato con `diff`.
+
+## 12-quater. Attendere almeno 3 minuti prima di giudicare una modifica WiFi
+
+Misurato sui climatizzatori Midea: **90-165 secondi** per riassociarsi dopo un
+`wifi reload`, indipendentemente dal BSSID.
+
+*Episodio*: al primo tentativo ho dichiarato il fallimento a 150 secondi e
+ripristinato. I dispositivi sarebbero probabilmente rientrati poco dopo: quel
+ripristino ha causato un **secondo** reload, cioè ha raddoppiato il disservizio
+che voleva risolvere.
+
+**Why:** la fretta di rimediare è una forma di impazienza travestita da
+prudenza. Un ripristino non è gratuito — costa esattamente quanto la modifica.
+
+**How to apply:** armare il timer a **600 s**, non 300, così è più lungo del
+tempo di riassociazione più lento osservato; e non intervenire prima di 3
+minuti a meno che non ci siano segnali di guasto diversi dalla semplice assenza
+dei client.
 
 ## 12-bis. La shell dei router è BusyBox `ash`, non bash
 
