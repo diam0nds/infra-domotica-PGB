@@ -1,7 +1,7 @@
 # Modus operandi e standard da replicare
 
-> Questo documento serve a **replicare in modo speculare** sull'impianto della
-> casa principale (OPNsense, Synology, domotica) quanto costruito qui.
+> Questo documento serve a **replicare in modo speculare** su CASA (OPNsense,
+> Synology, PVE `192.168.10.6`, domotica) quanto costruito su PGB.
 > Contiene due parti: **come si lavora** e **cosa si costruisce**.
 >
 > Ogni principio riporta l'episodio concreto che l'ha insegnato: non sono buone
@@ -9,7 +9,46 @@
 
 ---
 
+## Nomenclatura
+
+| Nome | Cos'è |
+|---|---|
+| **PGB** | rete della **seconda casa**: PVE, router master `192.168.15.1`, AP `.2`, domotica |
+| **CASA** | rete della **casa principale**: PVE `192.168.10.6`, OPNsense, Synology, domotica |
+
+Da usare sempre, anche negli hostname (`pgb-gw`, `casa-gw`) e nei nomi dei file.
+"L'altra casa" e "la casa principale" sono ambigue: entrambi i siti hanno un PVE,
+e su PGB ci sono due nodi che si chiamano entrambi `OpenWrt`.
+
+---
+
 # Parte 1 — Come si lavora
+
+## 0. Chiedere se la sessione è presidiata, prima di ogni altra cosa
+
+**All'inizio di ogni sessione, su PGB come su CASA, chiedere all'utente se si sta
+lavorando in modalità presidiata o non presidiata.** Non procedere con alcuna
+modifica finché non risponde. Le verifiche in sola lettura si fanno liberamente.
+
+| Modalità | Significato | Cosa cambia |
+|---|---|---|
+| **Presidiata** | qualcuno è sul posto e raggiunge gli apparati in tempi brevi | riavvii, `sysupgrade`, modifiche che possono tagliare l'accesso diventano valutabili |
+| **Non presidiata** | nessuno sul posto, potenzialmente per settimane | un guasto resta tale a lungo; nulla che richieda presenza fisica è una soluzione |
+
+**Why:** è la variabile da cui dipende ogni giudizio di prudenza in questo
+documento. Il protocollo `safe-change.sh` (§12), la preferenza per ciò che si
+autoripristina (§10), il divieto di `sysupgrade` senza via libera: tutte
+esistono perché nessuno può premere un pulsante. In modalità presidiata quelle
+regole non scompaiono, ma il costo di sbagliare cambia di ordine di grandezza —
+da "settimane di disservizio" a "dieci minuti e una tastiera".
+
+**How to apply:** chiederlo, non dedurlo. Non da questo file, non dalla roadmap,
+non dalla sessione precedente: cambia da un giorno all'altro. Registrare la
+risposta con la data in ciò che si produce, così una sessione futura sa in che
+condizioni è stata presa una decisione. E quando un intervento richiede
+presenza, dirlo e rimandarlo a una finestra presidiata invece di cercare un
+aggiramento software — su PGB il riavvio dopo blackout è stato deciso così,
+dopo aver scartato WoL e relè.
 
 ## 1. Verificare lo stato reale, non fidarsi della documentazione
 
@@ -333,6 +372,8 @@ Lo schema di questo sito è corretto e va replicato:
 
 # Parte 3 — Ordine per un sito nuovo
 
+0. **Modalità presidiata** — chiederla e registrarla (§0). Decide cosa è
+   prudente in tutti i passi che seguono
 1. **Inventario e accessi** — leggere tutto, non modificare nulla
 2. **Backup cifrato** — prima di ogni ottimizzazione, così ogni modifica è un
    diff reversibile
@@ -344,9 +385,11 @@ Lo schema di questo sito è corretto e va replicato:
 8. **Filtri e domotica**
 9. **Backup dei dati**, non solo delle configurazioni
 
-## Da chiedere prima di iniziare sull'altra casa
+## Da chiedere prima di iniziare su CASA
 
-L'infrastruttura principale **non è mai stata analizzata**. Prima di progettare:
+CASA **non è mai stata analizzata**. L'assessment gira dal PVE `192.168.10.6`,
+l'equivalente in CASA del PVE di PGB — che è quindi anch'esso oggetto di
+assessment, a partire da `/etc/pve/vzdump.cron`. Prima di progettare:
 
 - OPNsense è il router di frontiera, o c'è un apparato del provider davanti?
 - Il Synology: cosa ospita, e sta davanti o dietro OPNsense?
@@ -355,6 +398,13 @@ L'infrastruttura principale **non è mai stata analizzata**. Prima di progettare
 - Dove gira la domotica: Home Assistant anche là, o un altro sistema?
 - I backup dei dati esistono, e dove?
 - L'IP è statico o dinamico?
+- Cos'è `10.9.0.1`? Risponde al ping via tunnel ma non alle query DNS, e **non
+  appartiene a `192.168.10.0/24`**: esiste quindi almeno una subnet di CASA di
+  cui non si sa nulla
+- Quali subnet usa CASA, e ce n'è qualcuna che collide con quelle di PGB?
+  Una collisione rende l'integrazione impossibile senza NAT
+
+L'elenco completo (17 domande) sta nel prompt di avvio dell'assessment di CASA.
 
 Non fare assunzioni: qui l'assunzione "l'AP ha un IP fuori subnet" ha fatto
 perdere tempo, quando la realtà era che l'AP non era in rete affatto.
