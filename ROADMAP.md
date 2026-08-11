@@ -369,9 +369,25 @@ ragionamento:
 significa che non esista: significa che non rispondeva al momento della raccolta.
 Confrontare con l'inventario in `README.md`.
 
-**Resta da fare**: capire le API di `SONOFF-Zbridge-PRO` (bridge Zigbee: perdere
-la sua configurazione significa **riassociare tutti i dispositivi Zigbee**, quindi
-vale più degli Shelly) e del termostato `BHT-6000`.
+**I due "senza API" sono stati identificati il 2026-08-12, ed erano entrambi
+classificati male.** Nessuno dei due è Tuya o proprietario: montano firmware
+liberi con interfaccia locale completa.
+
+| Dispositivo | Cosa monta davvero | Come si salva |
+|---|---|---|
+| `SONOFF-Zbridge-PRO` `192.168.16.10` | **Tasmota 14.2.0.3** su ESP32-D0WD-V3, template `TCP ZBBridge Pro` <!-- no-secrets-ok: 14.2.0.3 e' la versione di Tasmota, non un indirizzo IP --> | scaricare la configurazione da `/dl` (endpoint di download, sola lettura) |
+| `BHT-6000-Termost` `192.168.16.23` | **WThermostat v1.23.beta1-fas** (ESP8266) | interfaccia su `/config`; nessun endpoint di dump: la configurazione va letta dalle pagine |
+
+⚠️ **Il bridge NON contiene gli accoppiamenti Zigbee.** Fa solo da ponte
+seriale-su-TCP (porta 8888) verso il chip Zigbee; Home Assistant ci si collega
+con **Zigbee2MQTT**. Quindi l'artefatto che evita di riassociare tutto è
+**`coordinator_backup.json` + `database.db` di Zigbee2MQTT**, dentro la VM 100 —
+non la configurazione del bridge. Oggi finisce nel vzdump come immagine intera,
+che non è la stessa cosa di un export ripristinabile su un coordinatore nuovo.
+**Questo è il pezzo che vale di più e non è ancora coperto.**
+
+Il termostato è già nello stato che cerchiamo per l'IoT: **nessuna connessione
+esterna**, unica uscita MQTT verso `192.168.15.4:1883`. Zero cloud.
 
 ### 4-ter. Backup remoto dei dati sul Synology di CASA
 **Fattibilita' misurata il 2026-08-11, in attesa di una configurazione su DSM.**

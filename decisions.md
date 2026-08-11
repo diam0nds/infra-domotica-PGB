@@ -435,3 +435,54 @@ Ottavo strumento di verifica mio che accusava o assolveva senza guardare. La
 regola resta quella: **prima di credere a un allarme — o a un via libera —
 provare lo strumento che l'ha prodotto, facendogli vedere il caso che deve
 riconoscere.**
+
+## 2026-08-12 — NAS di CASA: copia fuori sito misurata, non stimata
+
+**Sessione presidiata.** Esportazione `/volume1/backup-pgb` su `192.168.10.5`,
+autorizzata al solo `192.168.15.5`, creata dalla sessione di CASA.
+
+**Decisione: montaggio temporaneo, mai in `fstab`.** Su un sito normalmente non
+presidiato un NFS irraggiungibile con opzioni `hard` blocca i processi che lo
+toccano e trascina giu' `pvestatd` e l'interfaccia del PVE. Si monta per la
+durata della copia, si smonta subito.
+
+**Numeri misurati** (non stimati: copia reale di un vzdump vero):
+
+| Grandezza | Valore |
+|---|---|
+| Protocollo | **NFSv3** — il Synology rifiuta `vers=4.1` ("Protocol not supported") |
+| Copia | 319 MB in 227 s = **1,41 MB/s = 11,2 Mbit/s** |
+| Upload WAN sotto carico | 17 Mbit/s (payload + incapsulamento WireGuard) |
+| Latenza | 18,5 ms sotto carico contro 15,7 a riposo, **0% perdita** |
+| Integrita' | impronte md5 **identiche** |
+| Proiezione set completo 1,7 GB | **circa 20 minuti** |
+
+**Parametri di mount che funzionano**: `soft,timeo=600,retrans=5,noatime,vers=3`.
+
+`timeo` e' in **decimi di secondo**: il primo tentativo con `timeo=100` dava 10
+secondi, e la `close()` di un file da 320 MB — che su NFS svuota tutta la cache
+in una volta — sforava. Il mount `soft` abortiva un'operazione **lenta**
+scambiandola per un guasto. Non era il NAS: era il mio parametro.
+
+### Cosa non va messo in produzione
+
+**La verifica per rilettura.** Ricalcolare l'impronta del file remoto significa
+riscaricare tutto attraverso il tunnel: raddoppia la finestra notturna da 20 a
+40 minuti. Verifica completa **settimanale**, dimensione e data le altre notti.
+
+**Il `dd` per misurare.** Dandogli 300 MB da svuotare su un link lento si e'
+piantato in stato `D` (`folio_wait_bit_common`) oltre il timeout, perche' un
+processo in I/O NFS non muore al segnale finche' la RPC non scade. Nessun danno
+— i servizi del PVE non si sono mai fermati — ma per misurare si usa `rsync`,
+che gestisce gli errori, non `dd`, che accumula e basta.
+
+### Cifratura a riposo: no, e il perche'
+
+La sessione di CASA ha creato la cartella **in chiaro**, motivandolo: una
+condivisione cifrata va sbloccata a mano dopo ogni riavvio del NAS e fino ad
+allora non e' esportata, quindi su un sito non presidiato i backup si fermano in
+silenzio. Concordato. I vzdump restano non cifrati su un NAS in casa
+dell'utente; se un giorno servisse, la cifratura si fa lato PGB prima della copia.
+
+Sul NAS resta la copia del container AdGuard (335 MB), integra e verificata:
+**e' l'unica copia fuori sito esistente al momento**, quindi non la si cancella.
