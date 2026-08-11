@@ -433,7 +433,7 @@ che non è la stessa cosa di un export ripristinabile su un coordinatore nuovo.
 Il termostato è già nello stato che cerchiamo per l'IoT: **nessuna connessione
 esterna**, unica uscita MQTT verso `192.168.15.4:1883`. Zero cloud.
 
-### App Android di Home Assistant: non si collega — diagnosticato 2026-08-12
+### App Android di Home Assistant — lato server SISTEMATO 2026-08-12, resta l'app
 
 **Segnalato dall'utente**: l'app non funziona, "qualche problema nella gestione
 dell'URL". Verificato in sola lettura via API di Home Assistant.
@@ -455,11 +455,27 @@ dovrebbe funzionare sul modem dell'operatore, non su PGB-GW. Da fuori casa,
 invece, l'app usa lo stesso URL e il percorso è diverso: per questo il sintomo
 sembra capriccioso.
 
-**Rimedio, in ordine di pulizia:**
+**✅ Fatto il 2026-08-12** (sessione presidiata): `internal_url` impostato a
+`http://192.168.15.4:8123` via API WebSocket. Valore precedente: `None`.
+`external_url` **invariato**. Verificato subito dopo:
 
-1. **Impostare `internal_url`** a `http://192.168.15.4:8123` — Impostazioni →
-   Sistema → Rete. Poi nell'app Android indicare l'URL interno e **l'SSID di
-   casa**, così sceglie da sé quale usare. Non tocca niente della rete.
+```
+http://192.168.15.4:8123/        HTTP 200 in 0,005 s
+.../auth/providers               HTTP 200   (l'endpoint che usa l'app)
+/manifest.json                   HTTP 200
+URL esterno dalla stessa posizione   HTTP 000   <- conferma la diagnosi
+```
+
+Verificato anche che la strada sia libera da entrambe le reti WiFi di casa:
+
+- SSID **`PGB`** → `192.168.15.x`, stessa rete di Home Assistant, accesso diretto
+- SSID **`PGB-IoT`** → esiste già la regola `Allow HOME ASSISTANT from IoT VLAN`
+  (`IoTZone -> lan`, `dest_ip 192.168.15.4`, senza restrizione di porta)
+
+**Resta da fare, lato app** (non si può fare da qui): Impostazioni → app
+companion → il server → indicare **URL connessione interna**
+`http://192.168.15.4:8123` e **SSID rete domestica** `PGB`. L'app tiene la
+propria configurazione, separata da quella del server.
 2. Verificare **come si raggiunge davvero HA da fuori**: se l'accesso remoto
    passa dal tunnel WireGuard e non da un port forward, `external_url` dovrebbe
    puntare all'indirizzo raggiungibile nel tunnel, non a DuckDNS.
