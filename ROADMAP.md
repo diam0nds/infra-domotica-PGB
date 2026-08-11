@@ -433,6 +433,49 @@ che non è la stessa cosa di un export ripristinabile su un coordinatore nuovo.
 Il termostato è già nello stato che cerchiamo per l'IoT: **nessuna connessione
 esterna**, unica uscita MQTT verso `192.168.15.4:1883`. Zero cloud.
 
+### App Android di Home Assistant: non si collega — diagnosticato 2026-08-12
+
+**Segnalato dall'utente**: l'app non funziona, "qualche problema nella gestione
+dell'URL". Verificato in sola lettura via API di Home Assistant.
+
+**Causa**, tre fatti misurati che si incastrano:
+
+| Verifica | Risultato |
+|---|---|
+| `internal_url` in Home Assistant | **`None`** — non configurato |
+| `external_url` | l'endpoint DuckDNS del sito (in chiaro in `secrets/`, non qui) |
+| A cosa risolve quel nome | l'IP pubblico del sito, **aggiornato**: coincide con l'endpoint del tunnel WireGuard |
+| IP sulla WAN di PGB-GW | **`192.168.51.2`** — privato: il router è dietro il modem dell'operatore, doppio NAT |
+| Quel nome, chiamato da dentro casa | **HTTP 000 in 0,13 s** — irraggiungibile |
+
+Con `internal_url` non impostato, l'app quando è sul WiFi di casa **ripiega
+sull'URL esterno**. Raggiungere il proprio indirizzo pubblico dall'interno
+richiede il **NAT hairpin**, che qui non funziona — e con il doppio NAT
+dovrebbe funzionare sul modem dell'operatore, non su PGB-GW. Da fuori casa,
+invece, l'app usa lo stesso URL e il percorso è diverso: per questo il sintomo
+sembra capriccioso.
+
+**Rimedio, in ordine di pulizia:**
+
+1. **Impostare `internal_url`** a `http://192.168.15.4:8123` — Impostazioni →
+   Sistema → Rete. Poi nell'app Android indicare l'URL interno e **l'SSID di
+   casa**, così sceglie da sé quale usare. Non tocca niente della rete.
+2. Verificare **come si raggiunge davvero HA da fuori**: se l'accesso remoto
+   passa dal tunnel WireGuard e non da un port forward, `external_url` dovrebbe
+   puntare all'indirizzo raggiungibile nel tunnel, non a DuckDNS.
+
+⚠️ **Trappola da non ricalpestare**: la scorciatoia istintiva è un override DNS
+locale che faccia risolvere il nome DuckDNS a `192.168.15.4`.
+Su questo impianto **non funziona così com'è**: la protezione anti-rebinding
+di dnsmasq scarta le risposte che mappano un nome pubblico su un indirizzo
+privato. Andrebbe messa un'eccezione esplicita per quel dominio — vedi le
+trappole DNS già documentate. La soluzione 1 evita del tutto il problema.
+
+Collegato: lo spostamento dell'aggiornamento DuckDNS da Home Assistant al
+router (`ddns-scripts`), già in elenco. Nota: il componente `duckdns` **non**
+risulta caricato in Home Assistant, quindi l'aggiornamento lo fa un add-on,
+non l'integrazione. Da confermare prima di spostarlo.
+
 ### 4-ter. ✅ Export della rete Zigbee — FATTO 2026-08-12
 
 **Sessione presidiata.** `infra-common/scripts/collect-zigbee2mqtt.sh`, integrato
