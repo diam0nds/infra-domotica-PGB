@@ -159,6 +159,25 @@ Regole che lo accompagnano:
   `input=REJECT`, e verificare l'ordine in `iptables -L <catena> -n -v`: gli
   ACCEPT devono precedere il REJECT finale
 
+## 12-ter. Sul WiFi, prima di toccare la struttura delle BSS, fissare i BSSID
+
+Rimuovere o aggiungere una BSS su una radio **rinumera il MAC di quelle
+restanti**, perché derivano dal MAC base della radio per indice. Il BSSID
+cambia, e i dispositivi che lo tengono in cache smettono di collegarsi.
+
+*Episodio*: rimuovendo un'interfaccia mesh inerte e una SSID senza client, il
+BSSID della SSID della domotica è passato da `62:...` a `64:...`. I dodici
+Shelly hanno riscansionato senza problemi; i tre climatizzatori Midea sono
+rimasti giù 4 minuti.
+
+**Rimedio**: `option macaddr='<BSSID attuale>'` sulle interfacce che servono
+dispositivi sensibili, **prima** di modificare la struttura della radio.
+
+**Corollario**: la reazione a un cambio di BSSID dipende dal produttore e non è
+prevedibile a priori. Va misurata la lista dei client *prima* e *dopo* ogni
+reload, confrontando i **nomi** e non solo il conteggio — un conteggio uguale
+può nascondere dispositivi diversi.
+
 ## 12-bis. La shell dei router è BusyBox `ash`, non bash
 
 Tre incompatibilità incontrate in una sola sessione, ognuna costata un
