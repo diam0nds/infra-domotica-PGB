@@ -19,8 +19,13 @@
 README.md       !filter !diff
 decisions.md    !filter !diff
 ROADMAP.md      !filter !diff
-MODUS-OPERANDI.md !filter !diff
-scripts/**      !filter !diff
+
+# NOTA: MODUS-OPERANDI.md e scripts/ non stanno piu' qui — dall'11 agosto 2026
+# vivono in infra-common, che non e' cifrato. Le loro righe di eccezione sono
+# state rimosse: un pattern che non corrisponde a nulla non fa danno, ma tenerlo
+# fa credere che il file sia ancora qui.
+# verify-encryption.sh ricava l'allowlist da QUESTO file, quindi non c'e' una
+# seconda lista da aggiornare.
 
 # NOTA: assessment-router-master.md resta CIFRATO di proposito.
 # E' un elenco ragionato di debolezze con porte, versioni e percorsi: e' il file

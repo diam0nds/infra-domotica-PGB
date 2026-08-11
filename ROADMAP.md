@@ -40,7 +40,7 @@ AdGuard. Dettagli e trappole in `README.md`.
 
 ### Watchdog DNS — 2026-08-08
 Installato `/usr/bin/dns-watchdog` sul master (fonte in
-`scripts/router/dns-watchdog.sh`), cron al minuto, in `sysupgrade.conf`.
+`infra-common/scripts/router/dns-watchdog.sh`), cron al minuto, in `sysupgrade.conf`.
 Riduce la finestra di disservizio da 8-14 giorni a ~2 minuti.
 
 ### Backup dei router completato — 2026-08-08
@@ -210,7 +210,7 @@ completamente. Vale già oggi, non solo per le future smart TV.
 
 | # | Intervento | Rischio |
 |---|---|---|
-| ~~1~~ | ✅ **ATTIVO dal 2026-08-11** — profilazione ogni 15 min. `scripts/iot-profile-collect.sh` (cron sul PVE, `/etc/cron.d/iot-profile`), report con `scripts/iot-profile-report.sh`, dati in `/var/log/iot-profile.tsv`. **Da rimuovere il 18 agosto**, a finestra conclusa | nullo |
+| ~~1~~ | ✅ **ATTIVO dal 2026-08-11** — profilazione ogni 15 min. `infra-common/scripts/iot-profile-collect.sh` (cron sul PVE, `/etc/cron.d/iot-profile`), report con `infra-common/scripts/iot-profile-report.sh`, dati in `/var/log/iot-profile.tsv`. **Da rimuovere il 18 agosto**, a finestra conclusa | nullo |
 | 2 | **Redirezione DNS obbligatoria** della VLAN IoT verso AdGuard (DNAT su 53), efficace anche sui DNS cablati | molto basso |
 | 3 | **Blocco DoT/DoH** (853 + resolver noti): senza, un dispositivo aggira il filtro cifrando le query | basso |
 | 4 | **Redirezione NTP locale**: molti dispositivi hanno l'NTP cablato e lo usano per raggiungere l'esterno | basso |

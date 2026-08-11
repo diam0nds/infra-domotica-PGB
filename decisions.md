@@ -133,3 +133,58 @@ root, chiavi private del cluster Proxmox e credenziali AdGuard. Un push su
 GitHub li porta su un servizio esterno, dove restano nella cronologia git
 anche dopo un'eventuale cancellazione. Il repo privato da solo non basta: un
 token compromesso o un cambio di visibilità accidentale esporrebbe tutto.
+
+---
+
+## Tre repo invece di uno — 2026-08-11
+
+Con l'arrivo di CASA il repo unico `infra-domotica-PGB` è stato diviso in
+**`infra-common`** (metodo e script, non cifrato), **`infra-pgb`** e
+**`infra-casa`** (dati di sito, cifrati con **due chiavi git-crypt distinte**).
+
+**Motivo decisivo, misurato non supposto**: `collect-configs.sh` committa e
+pusha senza fare `pull` né `rebase` (zero occorrenze nello script). Con un repo
+solo scritto da due macchine, la seconda push della notte viene rifiutata per
+non-fast-forward, lo script riprova tre volte, esce con 1 e scrive il fallimento
+in `/var/log/infra-backup.log`, che nessuno legge. Il backup si fermerebbe in
+silenzio continuando a sembrare attivo: il fail-open che `MODUS-OPERANDI.md` §5
+vieta. **Ogni repo cifrato ha un solo scrittore.**
+
+**Alternative valutate e scartate:**
+
+- **Un repo con layer comune** (`common/`, `pgb/`, `casa/`): un posto solo da
+  guardare, ma richiede `pull --rebase` nel cron di entrambi i siti, cioè merge
+  automatici di file cifrati alle 04:30 su macchine non presidiate. Il rimedio
+  è peggio del male.
+- **Due repo completamente separati**, con `MODUS-OPERANDI.md` duplicato: più
+  semplice da avviare, ma la dottrina divergerebbe. Le sue lezioni arrivano da
+  entrambi i siti, e una documentazione divergente è peggio di nessuna (§9).
+- **Estrarre la history** di `MODUS-OPERANDI.md` e `scripts/` in `infra-common`:
+  `git filter-repo` non è installato e installarlo per un'operazione sola non si
+  giustifica. `infra-common` parte da un commit iniziale che cita l'origine.
+
+**Due chiavi git-crypt** è `MODUS-OPERANDI.md` §7 (chiavi separate per scopo)
+applicato un livello sopra: se la chiave di PGB finisce nel posto sbagliato,
+`assessment-casa.md` — il file il cui trapelare farebbe più danno — resta
+illeggibile. La chiave B va generata sul PVE di CASA e messa nel password
+manager accanto alla prima.
+
+### Correzioni entrate insieme alla divisione
+
+- **`git add -A` → stage dei soli path prodotti dallo script.** Su questo host
+  girano più sessioni sullo stesso working tree: l'11 agosto una raccolta ha
+  committato modifiche a `router-ap` fatte da un'altra sessione, attribuendole a
+  sé. Aggiunto anche un `flock`, perché due raccolte sovrapposte si rubano
+  l'indice git.
+- **Id delle VM non più cablati.** `qm config 100` e `pct config 101` diventano
+  un'enumerazione di `qm/pct list`, e AdGuard si cerca per nome. Con gli id fissi
+  su CASA non si sarebbe raccolto nulla, e qui una VM nuova sarebbe passata
+  inosservata.
+- **Allowlist della cifratura non più duplicata.** `verify-encryption.sh` la
+  ricava dalle righe `!filter` di `.gitattributes`. Due liste da tenere allineate
+  a mano erano un fail-open: chi aggiungeva un'eccezione e dimenticava lo script
+  otteneva un `ESITO: OK` su un repo che pushava quel file in chiaro.
+  Nel farlo è emerso che i pattern vanno iterati **quotati**: `for p in $ALLOW`
+  faceva espandere `scripts/*` sui file reali prima del confronto, e i file in
+  `scripts/router/` risultavano in chiaro a sorpresa. Ha fallito nella direzione
+  giusta — ha bloccato invece di rassicurare.

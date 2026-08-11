@@ -57,7 +57,7 @@ porte 22, 80, 443 aperte — OpenWrt con LuCI
 Dal PVE: `ssh root@fe80::c43b:93ff:fe7d:4dbf%vmbr0`
 
 ⚠️ La chiave `id_ed25519_infra` **non è ancora autorizzata su questo nodo**:
-era stata aggiunta solo al master. Finché non lo è, `collect-configs.sh` non
+era stata aggiunta solo al master. Finché non lo è, `infra-common/scripts/collect-configs.sh` non
 può raccoglierne la configurazione.
 
 Da fare: assegnargli un IPv4 statico nella LAN (es. `192.168.15.2`) — un nodo
@@ -544,7 +544,7 @@ Scartato `adblock` (l'utente ha escluso di caricare il master, che ha 8,4 MB di
 flash e 78 MB di RAM). Adottata invece la soluzione che dà a dnsmasq il
 controllo di salute che gli manca:
 
-`scripts/router/dns-watchdog.sh` verifica ogni minuto se AdGuard risponde e
+`infra-common/scripts/router/dns-watchdog.sh` verifica ogni minuto se AdGuard risponde e
 riscrive di conseguenza la lista degli upstream in `/tmp/dnsmasq-upstreams`,
 che dnsmasq rilegge a ogni SIGHUP — senza riavvii e **senza scritture sulla
 flash**, che su questi router è un bene di consumo.
@@ -556,7 +556,7 @@ flash**, che su questi router è un bene di consumo.
 | AdGuard torna | `192.168.15.3` | riattivato |
 | Router appena riavviato | `1.1.1.1` | sospeso |
 
-Installazione e ripristino: `scripts/router/README-watchdog.md`.
+Installazione e ripristino: `infra-common/scripts/router/README-watchdog.md`.
 
 ### ✅ Test di failover superato — 2026-08-11
 
@@ -602,7 +602,7 @@ Nota sui log: `crond` di BusyBox scrive le esecuzioni normali con facility
 Domanda dell'utente: *"in caso di ripristino del sistema poi perdiamo tutto?"*
 Con il backup di allora, **sì**.
 
-`collect-configs.sh` raccoglieva dai router **solo `/etc/config`**. Restavano
+`infra-common/scripts/collect-configs.sh` raccoglieva dai router **solo `/etc/config`**. Restavano
 fuori lo script del watchdog (`/usr/bin`), il suo cron (`/etc/crontabs/root`),
 il richiamo all'avvio (`/etc/rc.local`), la chiave SSH
 (`/etc/dropbear/authorized_keys`), `sysupgrade.conf` e l'elenco dei pacchetti
@@ -631,27 +631,45 @@ Equivalenti estesi: `ssh -i /root/.ssh/id_ed25519_infra root@192.168.15.1`
 (master) e `...@192.168.15.2` (AP). Da un'altra macchina non esistono, e
 servirebbe comunque la chiave privata, che sta solo sul PVE.
 
-`collect-configs.sh` usa questi alias: se vengono rinominati o rimossi, la
+`infra-common/scripts/collect-configs.sh` usa questi alias: se vengono rinominati o rimossi, la
 raccolta dai router smette di funzionare silenziosamente (il nodo risulta
 "NON raggiungibile via SSH" e viene saltato senza far fallire lo script).
 
 ## Backup delle configurazioni — operativo
 
 Remote: `diam0nds/infra-domotica-PGB` (privato), via deploy key ed25519.
-Cron: `/etc/cron.d/infra-backup`, ogni giorno alle **04:30**.
+⏭️ **Da rinominare in `infra-pgb`** su GitHub: l'operazione richiede l'interfaccia
+web (`gh` non è installato). Dopo la rinomina, `git remote set-url origin
+github-infra:diam0nds/infra-pgb` — GitHub reindirizza comunque le push, ma un
+remote che punta a un nome vecchio confonde.
+Cron: `/etc/cron.d/infra-backup`, ogni giorno alle **04:30**, eseguendo
+`/root/infra-common/scripts/collect-configs.sh`.
 Log: `/var/log/infra-backup.log`.
 
+Dall'11 agosto 2026 i repo sono **tre**: metodo e script stanno in
+`infra-common`, i dati di ciascun sito nel proprio repo cifrato, con **una
+chiave git-crypt distinta per sito** e **un solo scrittore per repo**. Il perché
+sta in `infra-common/README.md`.
+
 ```
-infra/
+/root/infra-common/              NON cifrato — nessun segreto, per costruzione
+├── MODUS-OPERANDI.md            come si lavora e cosa si costruisce
+└── scripts/
+    ├── collect-configs.sh       raccolta + commit + push (SITE=pgb|casa)
+    ├── verify-encryption.sh     controllo cifratura (cancello pre-push)
+    └── router/                  watchdog DNS, safe-change, test failover
+
+/root/infra/  → infra-pgb        cifrato tranne la documentazione
 ├── README.md                    in chiaro — inventario e architettura
 ├── decisions.md                 in chiaro — log delle decisioni
-├── scripts/
-│   ├── collect-configs.sh       raccolta + commit + push
-│   └── verify-encryption.sh     controllo cifratura (cancello pre-push)
+├── ROADMAP.md                   in chiaro — lavori concordati
+├── assessment-*.md              cifrato — elenchi di debolezze
 ├── hosts/pve/                   cifrato — /etc/pve, rete, cron, stato
-├── hosts/router-master/         cifrato — vuoto, in attesa di accesso SSH
-├── hosts/router-ap/             cifrato — vuoto, AP non ancora individuato
-└── guests/                      cifrato — def. VM/CT + AdGuardHome.yaml
+├── hosts/router-master/         cifrato — config, cron, script, pacchetti
+├── hosts/router-ap/             cifrato — idem
+├── guests/                      cifrato — def. VM/CT + AdGuardHome.yaml
+├── context/                     cifrato — CLAUDE.md e memoria fra sessioni
+└── upgrade/                     cifrato — runbook e backup pre-upgrade
 ```
 
 ### Cosa NON viene raccolto, per scelta
@@ -667,11 +685,11 @@ file in chiaro. La logica inversa (elencare cosa cifrare) fallisce in silenzio:
 un file nuovo che non corrisponde a nessun pattern finisce su GitHub in chiaro
 senza generare alcun errore.
 
-`collect-configs.sh` **non pusha** se `verify-encryption.sh` non passa. La
+`infra-common/scripts/collect-configs.sh` **non pusha** se `infra-common/scripts/verify-encryption.sh` non passa. La
 verifica clona il repo senza chiave e controlla che ogni file fuori allowlist
 inizi con l'header `\0GITCRYPT\0`.
 
-⚠️ **Rieseguire `verify-encryption.sh` dopo ogni modifica a `.gitattributes`.**
+⚠️ **Rieseguire `infra-common/scripts/verify-encryption.sh` dopo ogni modifica a `.gitattributes`.**
 
 Verifiche eseguite il 2026-08-08 su clone reale da GitHub: 35 file cifrati,
 6 in chiaro (solo documentazione e script), 0 sorprese, 0 hash o credenziali
