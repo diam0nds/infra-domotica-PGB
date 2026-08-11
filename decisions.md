@@ -188,3 +188,73 @@ manager accanto alla prima.
   faceva espandere `scripts/*` sui file reali prima del confronto, e i file in
   `scripts/router/` risultavano in chiaro a sorpresa. Ha fallito nella direzione
   giusta — ha bloccato invece di rassicurare.
+
+---
+
+## Il PVE passa dal router per il DNS — 2026-08-11
+
+`/etc/resolv.conf` del PVE aveva **un solo nameserver, `192.168.15.3`** (AdGuard
+diretto, nessun fallback). Ora: `192.168.15.1` primario, `192.168.15.3`
+secondario, applicato con `pvesh set /nodes/pve/dns`.
+
+**Come è emerso**: un `git push` è fallito con `Could not resolve hostname
+github.com`. Misurato subito dopo: **tutti e tre i resolver rispondevano**
+(router, AdGuard, Cloudflare) e il container AdGuard non si era mai riavviato
+(`up 10:08`). Era una singola risposta persa — e senza un secondo nameserver una
+risposta persa è un guasto.
+
+**Perché era grave più di quanto sembri**: l'unico host che violava la regola di
+progetto "i client ricevono il router, non AdGuard direttamente" era proprio
+quello che ospita AdGuard. Il PVE dipendeva per il DNS da un container che gira
+sul PVE, saltando `strictorder`, il watchdog e il fallback pubblico. È lo stesso
+schema del DDNS su Home Assistant: un servizio critico appoggiato al nodo che
+può cadere.
+
+**Perché nessuno se n'era accorto**: il DHCP non c'entrava — `resolv.conf` è
+statico, quindi la verifica "nessuna interfaccia imposta `dhcp_option 6`" era
+vera e insufficiente. E `test-failover.sh` interroga `dig @192.168.15.1`: ha
+collaudato il percorso dei client, e il PVE non era su quel percorso. Il test era
+corretto, il suo **ambito** no.
+
+**Perché via API e non a mano**: PVE legge e scrive `/etc/resolv.conf` dalla
+propria API. Modificandolo a mano la vista del nodo resta disallineata e una
+modifica futura dalla GUI riporta indietro il file senza dire nulla.
+
+Verificato dopo: risoluzione via glibc, `git fetch` su entrambi i repo, e
+`doubleclick.net` ancora bloccato — le query passano davvero dal router e poi da
+AdGuard. Il PVE ora eredita il failover già collaudato. Copia del file
+precedente in `/root/resolv.conf.pre-2026-08-11`.
+
+**Non misurato**: il passaggio automatico al secondo nameserver quando il router
+tace. È comportamento standard di glibc, non l'ho provato. Se il router tace,
+però, il problema è più grande del DNS.
+
+## Il fallimento del backup è diventato visibile — 2026-08-11
+
+`collect-configs.sh` usciva con 1 e scriveva in `/var/log/infra-backup.log`, che
+nessuno legge: un backup fermo continuava a sembrare attivo. Ora ogni uscita per
+errore lascia **due tracce che non vanno cercate**:
+
+- una riga in `journalctl -t infra-backup` con priorità `daemon.err`;
+- il file `BACKUP-FALLITO.txt` nella directory del repo, con motivo e comandi di
+  diagnosi. **La riuscita lo cancella**, quindi la sua presenza significa
+  "l'ultima esecuzione è andata male", non "è andata male una volta". In
+  `.gitignore`, e citato in `CLAUDE.md` perché una sessione lo veda subito.
+
+Niente agenti di monitoraggio: l'utente li ha esclusi e la eMMC non li
+sopporterebbe. Questo costa una `logger` e un file per esecuzione fallita, zero
+scritture quando va bene.
+
+### Difetto trovato provando il guasto, non il funzionamento
+
+Provando il percorso di errore è venuto fuori che il commento *"verranno inviati
+alla prossima esecuzione"* era **falso**. Lo script usciva con 0 appena non
+trovava modifiche nei path raccolti, **prima** di arrivare al push: un commit
+creato da un'esecuzione il cui push era fallito restava locale **per sempre**,
+perché la volta dopo non c'era nulla di nuovo da committare. Difetto presente
+dall'8 agosto, invisibile finché si provava solo il percorso felice.
+
+Corretto: quando non c'è nulla da committare lo script confronta `origin/main`
+con `HEAD` e, se ci sono commit mai inviati, procede al push. Verificato sul
+repo di prova: prima esecuzione blocca e segnala, seconda **riprova** e segnala
+di nuovo, uscita 1 in entrambi i casi.

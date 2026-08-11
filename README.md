@@ -376,6 +376,42 @@ Lato client va invece tutto bene: nessun `dhcp_option 6`, quindi i client
 ricevono il router come DNS, e anche via IPv6 (`ra=server`, `dhcpv6=server`)
 viene annunciato il router. Nessun bypass diretto dai client.
 
+### ⚠️ Il PVE era l'eccezione — corretto il 2026-08-11
+
+Il PVE non prende il DNS dal DHCP: ha un `/etc/resolv.conf` statico, e conteneva
+**un solo nameserver, `192.168.15.3`** — AdGuard, direttamente, senza fallback.
+Quindi l'unico host che violava la regola "i client ricevono il router" era
+proprio quello che ospita AdGuard: **l'host dipendeva per il DNS da un container
+che gira sull'host stesso**, saltando `strictorder`, il watchdog e il fallback
+pubblico.
+
+Scoperto perché un `git push` è fallito con `Could not resolve hostname
+github.com` mentre **tutti e tre i resolver rispondevano correttamente** e il
+container non si era mai riavviato (`up 10:08`): è bastata una risposta persa.
+Alle 04:30 lo stesso inciampo salta un backup.
+
+Il test di failover del 2026-08-11 non poteva vederlo: `test-failover.sh`
+interroga `dig @192.168.15.1`, cioè il router. **Ha verificato il percorso dei
+client, e il PVE non era su quel percorso.** Il test era corretto, il suo ambito
+no.
+
+Corretto via API di PVE (`pvesh set /nodes/pve/dns`) e non a mano, così la vista
+del nodo resta coerente e una modifica futura dalla GUI non riporta indietro il
+file di nascosto:
+
+```
+nameserver 192.168.15.1     router: strictorder + watchdog + fallback pubblico
+nameserver 192.168.15.3     AdGuard diretto, solo se il router tace
+```
+
+Verificato dopo: risoluzione via glibc, `git fetch` verso GitHub su entrambi i
+repo, e `doubleclick.net` ancora bloccato — cioè le query passano davvero dal
+router e da AdGuard, il filtro non è stato aggirato dalla modifica. Il PVE ora
+**eredita il failover già collaudato** invece di avere un percorso proprio non
+testato.
+
+Copia del file precedente in `/root/resolv.conf.pre-2026-08-11`.
+
 AdGuard risolve per conto proprio via DoH verso `dns10.quad9.net` con bootstrap
 Quad9: non dipende dal router, quindi non c'è rischio di dipendenza circolare.
 

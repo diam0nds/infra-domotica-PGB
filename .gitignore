@@ -7,3 +7,6 @@
 upgrade/**/*.bin
 upgrade/**/pacchetti/
 upgrade/**/target.manifest
+
+# Marcatore di guasto del backup: stato locale, non va versionato.
+BACKUP-FALLITO.txt
