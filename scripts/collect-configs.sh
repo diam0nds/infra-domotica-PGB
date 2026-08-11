@@ -76,6 +76,36 @@ else
   log "guest: container 101 non in esecuzione, AdGuard saltato"
 fi
 
+# ------------------------------------------- contesto operativo e memoria
+# CLAUDE.md e la memoria fra sessioni stavano fuori dal repo, quindi solo su
+# questa eMMC: unico disco, non sostituibile, quattro stacchi di corrente a
+# caldo alle spalle. E' lo stesso difetto del DDNS su Home Assistant — il
+# contesto che serve a RECUPERARE l'infrastruttura appoggiato alla macchina
+# che puo' morire.
+#
+# Restano CIFRATI, cioe' non vengono aggiunti all'allowlist di .gitattributes:
+# sono un ritratto ragionato dell'infrastruttura, con indirizzi, versioni,
+# vincoli e debolezze note.
+log "contesto: CLAUDE.md e memoria fra sessioni"
+CTX="$REPO/context"
+MEM=/root/.claude/projects/-root/memory
+rm -rf "$CTX"
+mkdir -p "$CTX"
+
+if [ -f /root/CLAUDE.md ]; then
+  install -m 600 /root/CLAUDE.md "$CTX/CLAUDE.md"
+else
+  log "contesto: /root/CLAUDE.md assente, saltato"
+fi
+
+if [ -d "$MEM" ]; then
+  mkdir -p "$CTX/memory"
+  cp -a "$MEM"/. "$CTX/memory/" 2>/dev/null
+  log "contesto: $(ls -1 "$CTX/memory" | wc -l) file di memoria raccolti"
+else
+  log "contesto: directory memoria assente, saltata"
+fi
+
 # ---------------------------------------------------------------- routers
 # Richiedono la chiave ed25519 autorizzata sul nodo. Finche' non c'e',
 # il passo viene saltato senza far fallire la raccolta.
