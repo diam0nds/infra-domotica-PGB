@@ -120,7 +120,39 @@ eMMC senza sostituzione possibile, 8,4 MB di flash sul router, 4 GB di RAM
 liberi sul PVE. Niente stack write-heavy, niente liste enormi, liste in RAM
 quando possibile.
 
-## 12. Proporre, aspettare l'ok, poi agire
+## 12. Su un apparato remoto, armare il ripristino PRIMA di toccare
+
+Una regola firewall sbagliata, o un `ifdown` sull'interfaccia da cui si è
+collegati, taglia l'accesso a un apparato che sta in una casa vuota. Non esiste
+rimedio da remoto.
+
+**Protocollo obbligatorio per ogni modifica su router master e AP**, con
+`scripts/router/safe-change.sh`:
+
+```sh
+safe-change.sh arm firewall 300     # backup + ripristino automatico fra 5 min
+# ...applico UNA modifica...
+# ...verifico di essere ancora dentro E che la modifica faccia quel che deve...
+safe-change.sh confirm firewall     # solo ora disarmo
+```
+
+Se la verifica non arriva — perché la modifica ha tagliato l'accesso — la
+configurazione torna da sola allo stato precedente e la sessione si recupera.
+È l'interruttore dell'uomo morto.
+
+Regole che lo accompagnano:
+
+- **Mai** `/etc/init.d/network restart`: rimbalza `br-lan` e fa cadere la
+  sessione. Solo `ifdown`/`ifup` sull'interfaccia specifica
+- Verificare da un percorso che **non dipende** dalla modifica in corso
+- Una modifica per volta, con conferma in mezzo: se se ne fanno due e qualcosa
+  si rompe, non si sa quale
+- Il pacchetto `network` è il più pericoloso: il ripristino rimette il file ma
+  non riavvia nulla, perché un riavvio globale è peggio del problema
+- Firmware e `sysupgrade`: **mai** senza un via libera esplicito e la procedura
+  di recupero TFTP pronta
+
+## 13. Proporre, aspettare l'ok, poi agire
 
 È produzione domestica: DNS, WiFi e domotica sono servizi che una famiglia usa.
 Le verifiche in sola lettura si fanno liberamente; le modifiche si concordano.
