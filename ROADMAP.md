@@ -280,24 +280,45 @@ enormi sono controproducenti. Le smart TV richiedono attenzione particolare —
 molte usano DNS hardcoded (tipicamente 8.8.8.8) e vanno intercettate con una
 regola di redirezione sul router, altrimenti aggirano AdGuard del tutto.
 
-### 4. Backup dei dati di VM e container — RIPRESO IN CARICO
-`/etc/pve/vzdump.cron` è vuoto: **non esiste alcun backup di VM e container**.
-La VM Home Assistant è 32 GB di storico, automazioni e integrazioni, senza
-alcuna copia. I ~14 GB liberi nel volume group non bastano per un vzdump in
-locale: serve una destinazione esterna (NAS, disco USB, share di rete).
+### ✅ 4. Backup dei dati di VM e container — FATTO 2026-08-11
 
-⚠️ Il 9 agosto 2026 la macchina ha subito il quarto stacco di corrente a caldo
-documentato. Ogni episodio è una roulette sulla eMMC, che è l'unico disco e non
-è sostituibile. **Questo è il rischio più grave fra quelli aperti.**
+Job PVE nativo `pgb-daily`: ogni giorno alle **02:30**, storage `local`,
+modalità snapshot, zstd, ritenzione `keep-daily=5,keep-weekly=3`.
 
-**Stato**: l'utente ha chiesto di rimandare ("segna il punto, poi ci torniamo").
+Numeri misurati al primo backup reale:
 
-### 4. Backup dei dati di VM e container
-`/etc/pve/vzdump.cron` è vuoto: **non esiste alcun backup di VM e container**.
-La VM Home Assistant è 32 GB di storico, automazioni e integrazioni, senza
-alcuna copia. I ~14 GB liberi nel volume group non bastano per un vzdump in
-locale: serve una destinazione esterna (NAS, disco USB, share di rete).
-**Stato**: messo in roadmap dall'utente, da affrontare più avanti.
+| | |
+|---|---|
+| VM 100 Home Assistant | **1,36 GB** compressi, 5:53 |
+| CT 101 AdGuard | **319 MB**, 1:01 |
+| Totale per set | ~1,7 GB, ~7 minuti |
+| Ritenzione piena (8 set) | ~14 GB su 31 liberi |
+
+**Ripristino verificato**, non solo dichiarato: container ripristinato su VMID
+999, `AdGuardHome.yaml` presente con `blocking_mode: nxdomain` — la modifica
+fatta lo stesso giorno. Montato in sola lettura e **non avviato** (stesso MAC
+dell'originale), poi rimosso.
+
+⚠️ **Correzione a quanto era scritto qui prima**: "i ~14 GB liberi nel volume
+group non bastano, serve una destinazione esterna" era **falso**. Confondeva il
+thin pool LVM con lo storage `local`, che sta su root con 33 GB liberi ed era
+già abilitato ai backup. E i dati reali sono 7,5 GB, non 32: il disco è thin
+provisioned. L'errore ha rimandato l'intervento per un ostacolo inesistente.
+
+⚠️ Anche "ogni stacco a caldo è una roulette sulla eMMC" era infondato:
+misurato `Life Time Estimation A/B = 0x01` (0-10% consumato) e `Pre EOL = 0x01`
+(normale). La eMMC è praticamente nuova. Il rischio reale degli stacchi è la
+corruzione nell'istante del taglio, non l'usura.
+
+**Cosa resta**: una destinazione **esterna**. Questo backup sta sullo stesso
+disco dei dati, quindi non copre morte della eMMC, furto o incendio. In più il
+carico di picco misurato è **13.17** su 4 core, perché la eMMC legge e scrive
+insieme: un NAS o un disco USB migliorerebbe anche le prestazioni.
+
+**Limite noto**: un job PVE a orario fisso non recupera le esecuzioni perse. Se
+la macchina è spenta alle 02:30 quel backup salta — stesso difetto già visto sul
+backup delle configurazioni, là risolto con un `@reboot`. Qui non c'è un
+equivalente nativo.
 
 ### 5. Riavvio automatico dopo blackout
 BIOS `Restore on AC Power Loss` da `Power Off` a `Power On`. L'utente

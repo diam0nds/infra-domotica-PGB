@@ -1,5 +1,147 @@
 # Log delle decisioni
 
+---
+
+## 2026-08-11 — ✅ Backup dei dati VM e container: attivo su storage locale
+
+**Decisione**: job PVE nativo `pgb-daily`, ogni giorno alle **02:30**, storage
+`local`, modalità **snapshot**, compressione **zstd**, ritenzione
+`keep-daily=5,keep-weekly=3`.
+
+**Motivo**: non esisteva **nessun** backup dei dati — confermato da entrambi i
+meccanismi (`/etc/pve/jobs.cfg` assente, `vzdump.cron` vuoto). Era l'unica voce
+aperta che separava "perdere tutto" da "non perderlo": le configurazioni erano
+salvate, i dati no.
+
+### Numeri reali, misurati non stimati
+
+| | |
+|---|---|
+| VM 100 Home Assistant | 32 GiB scanditi a 93,4 MiB/s → **1,36 GB** compressi, 5:53 |
+| CT 101 AdGuard | **319 MB**, 1:01 |
+| Totale per set | **~1,7 GB**, ~7 minuti |
+| Ritenzione piena (8 set) | ~14 GB su 31 GB liberi |
+| Carico di picco | **13.17** su 4 core — la eMMC legge e scrive insieme |
+
+Servizi verificati **durante** il backup: DNS e Home Assistant rispondevano.
+Il guest agent risponde, quindi lo snapshot è coerente a livello di filesystem
+(`fsfreeze` prima, `resuming VM again` dopo) e la VM non si ferma.
+
+### Ripristino verificato, non solo dichiarato
+
+`vzdump` che scrive "finished successfully" non è una prova. Eseguito un
+**ripristino reale** del container su VMID 999:
+
+```
+hostname adguard, rootfs 2G
+/opt/AdGuardHome/AdGuardHome.yaml   presente, 4069 byte
+blocking_mode: nxdomain            <- la modifica fatta lo stesso giorno
+```
+
+Il backup contiene lo stato **corrente**. Il container di prova è stato
+**montato in sola lettura e non avviato**: ha lo stesso MAC dell'originale
+(`BC:24:11:3E:76:8D`) e avviarlo avrebbe creato un conflitto in rete. Rimosso
+dopo la verifica.
+
+### ⚠️ Due correzioni a mie affermazioni precedenti
+
+1. **"I ~14 GB liberi non bastano per un vzdump locale, serve una destinazione
+   esterna"** — falso. Confondevo lo spazio libero del thin pool LVM con lo
+   storage `local`, che sta sul filesystem di root con **33 GB liberi** ed era
+   **già** configurato con `content backup`. E i dati reali sono 7,5 GB, non 32:
+   il disco della VM è thin provisioned. Questo errore ha rimandato un intervento
+   importante per un ostacolo inesistente.
+2. **"Ogni stacco a caldo logora la eMMC"** — ripetuto più volte, infondato.
+   Misurato con `mmc extcsd read`: `Life Time Estimation A e B = 0x01` (0-10% di
+   vita consumata), `Pre EOL = 0x01` (normale). La eMMC è praticamente nuova. Il
+   rischio degli stacchi a caldo è la **corruzione nell'istante del taglio**, un
+   guasto che quei contatori non misurano — il backup protegge da quello.
+
+### Cosa questo backup NON copre
+
+Protegge da corruzione della VM, aggiornamenti sbagliati, errori di
+configurazione, cancellazioni. **Non** protegge da morte della eMMC, furto o
+incendio: sta sullo stesso disco dei dati.
+
+Una destinazione esterna resta da fare, e il carico di picco 13.17 è un
+argomento in più — con un NAS o un disco USB la eMMC non farebbe lettura e
+scrittura contemporanee.
+
+### Limite noto della pianificazione
+
+Un job PVE a orario fisso **non recupera le esecuzioni perse**: se la macchina è
+spenta alle 02:30, quel backup salta. È lo stesso difetto già visto sul backup
+delle configurazioni, risolto là con un `@reboot`. Qui non c'è un equivalente
+nativo: da valutare se aggiungerne uno.
+
+---
+
+## 2026-08-11 — ✅ Upgrade PGB-GW da 21.02.3 a 24.10.8: ESEGUITO
+
+**Decisione**: `sysupgrade` mantenendo la configurazione, in **sessione
+presidiata**, senza acquistare un secondo apparato.
+
+**Esito**: riuscito. Kernel da 5.4.188 a 6.6.144, firewall da fw3/iptables a
+fw4/nftables (202 regole), 162 pacchetti, 0 aggiornabili. Entrambi i tunnel
+WireGuard con handshake, 17/17 dispositivi IoT, DNS con filtraggio attivo, reti
+di CASA raggiungibili.
+
+**Alternativa scartata dall'utente**: preparare un secondo apparato al banco e
+sostituirlo (~30-40 €), che avrebbe azzerato il rischio sul sito in produzione.
+L'utente ha scelto il flash diretto accettando il rischio, con il patto di
+ripristinare a mano guidato passo a passo.
+
+### Cronologia della scrittura
+
+```
++  5s   ping su    (sysupgrade gira da ramfs, sta ancora scrivendo)
++ 10s   ping giu   (scrittura flash e riavvio)
++ 78s   ping su    versione 24.10.8, SSH con la chiave preservata
++150s   17/17 dispositivi IoT rientrati, Midea 3/3
+```
+
+⚠️ Il ping che risponde a +5s **non significa che l'upgrade sia finito**: durante
+`sysupgrade` il sistema gira da ramfs e la rete resta su mentre scrive la flash.
+Il segnale valido è la versione, non la raggiungibilità.
+
+### Cosa ha funzionato della preparazione
+
+- **`sysupgrade -T`** (exit 0) e **`compat_version` 1.1 su entrambi i lati**: i
+  due controlli autorevoli che hanno dato il via libera al mantenimento della
+  config. Il messaggio "device 1.0, cannot migrate swconfig to DSA" nei metadati
+  era il testo-modello dell'immagine, non la nostra situazione.
+- **L'insieme di 21 pacchetti offline**: installazione senza un solo errore né
+  dipendenza mancante. Senza, i due tunnel sarebbero rimasti giù con l'unica via
+  di ripristino che passava dal router appena riflashato.
+- **L'inventario via `/overlay/upper`**: ha trovato `luci-proto-wireguard` e
+  `luci-app-wireguard`, che il mio primo elenco basato su filtri per nome aveva
+  perso, e due chiavi WireGuard obsolete in `/root` da cancellare.
+- **La regola dei 3 minuti**: a +120 s i Midea erano ancora assenti, a +150 s
+  tutti rientrati. Concludere prima avrebbe prodotto un falso allarme.
+
+### Due intoppi, entrambi miei
+
+1. **`nohup` non esiste** nella BusyBox di 21.02: il primo tentativo di lanciare
+   il flash distaccato è fallito con `ash: nohup: not found` **senza toccare
+   nulla**. Su 24.10 `setsid` esiste, `nohup` ancora no. La forma corretta è
+   eseguire `sysupgrade` in modo **sincrono**: `stage2` fa `exec` in una shell su
+   ramfs, quindi sopravvive per progetto alla caduta della sessione SSH, e
+   tenendo la connessione aperta nessun SIGHUP può interromperlo a metà.
+2. Dopo l'installazione dei pacchetti i tunnel non salivano: **netifd carica gli
+   handler `proto` solo all'avvio**, e `wireguard.sh` era arrivato dopo.
+   `ubus call network reload` non basta, serve `/etc/init.d/network restart` —
+   da lanciare distaccato con `setsid`, perché rimbalza `br-lan`.
+
+### ⚠️ I nomi delle interfacce WiFi sono cambiati
+
+```
+21.02:  wlan0, wlan0-1, wlan0-2, wlan1
+24.10:  phy0-ap0, phy1-ap0
+```
+
+Ogni comando che cita `wlan0` **fallisce silenziosamente** su PGB-GW. Gli script
+che enumerano con `iw dev` si adattano da soli; quelli con nomi cablati no.
+
 Formato: data, decisione, motivo. Le decisioni **non** vanno riaperte senza
 un motivo nuovo — se una scelta è qui, è già stata discussa.
 
