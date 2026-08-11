@@ -105,8 +105,8 @@ capo** (OPNsense o Synology) che l'utente sta confondendo con questo.
 ### 1-bis. Spostare l'aggiornamento DuckDNS sul router
 **Richiesto dall'utente il 2026-08-11, da fare più avanti.**
 
-`diam0nds-pgb.duckdns.org` è l'hostname con cui la casa principale cerca questo
-sito. Non esiste alcun aggiornatore DDNS su router master, AP o PVE: secondo
+Esiste un hostname DuckDNS con cui CASA cerca PGB (il nome sta nel config
+cifrato). Non esiste alcun aggiornatore DDNS su router master, AP o PVE: secondo
 l'utente lo gestisce un **add-on di Home Assistant**, quindi gira nella VM 100.
 
 **Perché è un problema**: HAOS gira sul PVE, che dopo un blackout resta spento
@@ -193,7 +193,7 @@ comandi vocali che passano dal loro cloud.
 
 **Confermato subito dalla profilazione**: al primo campionamento successivo è
 emerso che `192.168.16.20` (CAMER-SHELLY25-Luci) parla con
-`34.38.167.174:6021` — Google Cloud, porta del **Shelly Cloud**. Lo snapshot
+`34.38.167.174:6021` — Google Cloud, porta del **Shelly Cloud**. <!-- no-secrets-ok: indirizzo di terzi, non nostro --> Lo snapshot
 iniziale l'aveva mancato e mi aveva portato a scrivere che i Shelly non
 uscivano su internet. **Almeno uno lo fa.**
 

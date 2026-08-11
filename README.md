@@ -127,8 +127,9 @@ menziona è quello del suo **ufficio**, estraneo a questi nodi.
 ### ⚠️ La causa era la regola DNAT `WG-s2S`, non la porta
 
 **Scoperta il 2026-08-11 dopo diverse ore di diagnosi.** Il tunnel
-site-to-site era fermo da giorni: 31.703 pacchetti inviati verso
-`31.189.79.110:52365`, **zero risposte**, flusso `[UNREPLIED]` in conntrack.
+site-to-site era fermo da giorni: 31.703 pacchetti inviati verso l'endpoint
+pubblico di CASA (indirizzo e porta nel config cifrato), **zero risposte**,
+flusso `[UNREPLIED]` in conntrack.
 
 Il colpevole era questa regola sul router:
 
@@ -156,7 +157,8 @@ misura sì, ed è inequivocabile.
 
 Erano già stati verificati e scartati: chiavi (corrette da entrambi i lati,
 incluse quelle di istanza), preshared key (assenti da entrambi), porta di
-destinazione (52365, confermata da un client funzionante sulla stessa porta),
+destinazione (nel config cifrato, confermata da un client funzionante sulla
+stessa porta),
 DDNS (corretto su tre resolver), endpoint (corretti da entrambi i lati),
 raggiungibilità della casa principale (una connessione TCP verso di lei
 funzionava nello stesso momento).
@@ -186,8 +188,8 @@ pubblica** invece di quella del router. Handshake impossibile. Nella sezione
 `[Peer]` va la chiave del server:
 
 ```
-PublicKey = eV+nkZm3fZK2T0kJhADO2VQOnkugKdhwQx1mJQffyX4=   (chiave di wg0)
-DNS       = 192.168.9.1                                     (indirizzo del router su wg0)
+PublicKey = <chiave pubblica del router su wg0>   (nel config cifrato)
+DNS       = 192.168.9.1                           (indirizzo del router su wg0)
 ```
 
 Corretto questo, il client si è collegato — dimostrando anche che l'inoltro di
@@ -464,8 +466,8 @@ server 1.1.1.1#53:      queries sent 0
 | `doubleclick.net` | NXDOMAIN |
 | `google-analytics.com` | NXDOMAIN |
 | `ads.youtube.com` | NXDOMAIN |
-| `github.com` | 140.82.121.4 |
-| `openwrt.org` | 64.226.122.113 |
+| `github.com` | 140.82.121.4 <!-- no-secrets-ok: indirizzo di terzi, non nostro -->|
+| `openwrt.org` | 64.226.122.113 <!-- no-secrets-ok: indirizzo di terzi, non nostro -->|
 
 **Da ~7% a 100% del traffico DNS attraverso AdGuard.** Filtraggio deterministico,
 risoluzione dei domini legittimi intatta.
