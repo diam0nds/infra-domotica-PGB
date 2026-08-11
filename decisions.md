@@ -400,3 +400,38 @@ Corretto: quando non c'è nulla da committare lo script confronta `origin/main`
 con `HEAD` e, se ci sono commit mai inviati, procede al push. Verificato sul
 repo di prova: prima esecuzione blocca e segnala, seconda **riprova** e segnala
 di nuovo, uscita 1 in entrambi i casi.
+
+## 2026-08-12 — Backup della configurazione degli Shelly (sessione presidiata)
+
+**Decisione**: gli Shelly entrano nel backup cifrato giornaliero via `GET
+/settings` (API Gen1), in sola lettura, dalla lista dei lease statici del router.
+
+**Perché la lista dai lease e non un elenco nello script**: quando si aggiunge un
+dispositivo lo si registra comunque nei lease statici. Un elenco scritto dentro lo
+script sarebbe la seconda copia della stessa informazione, e resterebbe indietro
+in silenzio — il dispositivo nuovo semplicemente non verrebbe salvato, senza che
+nulla lo segnali.
+
+**Perché non un backup completo del dispositivo**: gli Shelly Gen1 non espongono
+un export/import della configurazione. `/settings` è ciò che si può leggere, e
+copre quello che costa tempo rifare a mano: calibrazione delle tapparelle
+(`maxtime_open`/`maxtime_close`, misurati 31,0 s sulla tapparella cucina), nomi,
+pianificazioni, MQTT. Non è un'immagine ripristinabile con un comando: è la
+scheda tecnica da cui riconfigurare un sostituto.
+
+### La lezione, che è la stessa di altre sette volte
+
+L'avviso "dispositivi in meno rispetto alla raccolta precedente" **non poteva
+scattare**: `collect-configs.sh` fa `rm -rf guests/` prima della raccolta, quindi
+il conteggio "prima" era sempre 0. Il codice sembrava corretto e avrebbe stampato
+per mesi una riga rassicurante senza controllare niente.
+
+Trovato perché l'output diceva `(erano 0)` quando i file c'erano — un dettaglio
+che non tornava, non un test. Corretto leggendo il termine di confronto da `git
+ls-files`, cioè dall'ultima raccolta committata, e **verificato togliendo un file
+a mano**: l'avviso scatta e nomina il dispositivo.
+
+Ottavo strumento di verifica mio che accusava o assolveva senza guardare. La
+regola resta quella: **prima di credere a un allarme — o a un via libera —
+provare lo strumento che l'ha prodotto, facendogli vedere il caso che deve
+riconoscere.**

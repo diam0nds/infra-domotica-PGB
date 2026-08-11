@@ -320,34 +320,58 @@ la macchina è spenta alle 02:30 quel backup salta — stesso difetto già visto
 backup delle configurazioni, là risolto con un `@reboot`. Qui non c'è un
 equivalente nativo.
 
-### 4-bis. Backup della configurazione dei dispositivi Shelly
-**Richiesto dall'utente il 2026-08-11.**
+### 4-bis. ✅ Backup della configurazione dei dispositivi Shelly — FATTO 2026-08-12
+**Richiesto dall'utente il 2026-08-11, completato il 2026-08-12** (sessione
+**presidiata**).
 
-I 12 Shelly non hanno nessun backup della loro configurazione: se uno si guasta e
-viene sostituito, orari, calibrazione delle tapparelle, nomi dei relè e
-impostazioni MQTT vanno ricostruiti a mano uno per uno.
+Gli Shelly non avevano alcun backup: se uno si guastava e veniva sostituito,
+orari, calibrazione delle tapparelle, nomi dei relè e impostazioni MQTT andavano
+ricostruiti a mano uno per uno. Ora sono nel backup cifrato giornaliero.
 
-**Fattibilità verificata**: il PVE raggiunge la VLAN IoT (la regola
-`lan -> IoTZone` esiste) e l'API Gen1 risponde in sola lettura:
+**Cosa gira**: `infra-common/scripts/collect-shelly.sh`, richiamato da
+`collect-configs.sh`. Solo `GET /settings` sull'API Gen1: nessuna scrittura sui
+dispositivi, nessun agente installato, 52 KB per l'intero parco. L'elenco dei
+dispositivi si legge dai lease statici del router, quindi si adatta da sé quando
+se ne aggiungono.
 
-```
-http://192.168.16.11/settings  ->  2960 byte di JSON, "device":{"type":"SHSW-25"
-```
+**Coperti: 11 dispositivi** — 8× SHSW-25, 2× SHRGBW2, 1× SHSW-PM.
 
-`192.168.16.17` (CORR-SHELLY-EM) non risponde: e' quello gia' guasto, non un
-limite del metodo.
+**Non coperti, e perché** (scritto anche in `guests/shelly/LEGGIMI.txt`, così chi
+legge il repo non crede che sia tutto):
 
-**Come**: estendere `collect-configs.sh` con un passo che scarica `/settings` da
-ogni indirizzo `192.168.16.x` censito nei lease statici e lo salva in
-`guests/shelly/<nome>.json`. Nessuna scrittura sui dispositivi, nessun agente
-installato, poche decine di KB per l'intero parco.
+| Dispositivo | Motivo |
+|---|---|
+| `SONOFF-Zbridge-PRO` | 404 su `/settings` e `/rpc`: API propria, da studiare |
+| `BHT-6000-Termost` | 404 su entrambe: basato su Tuya, nessuna API locale |
+| 3× Midea (clima) | nessun server HTTP, solo client verso il cloud |
+| `CORR-SHELLY-EM` (`.17`) | non risponde: è quello **già guasto**, non un limite del metodo |
 
-⚠️ Il JSON di `/settings` puo' contenere credenziali WiFi e MQTT: deve finire
-nella parte **cifrata** del repo, cioe' non va aggiunto all'allowlist di
-`.gitattributes`. Verificare con `verify-no-secrets.sh` prima del primo push.
+**Tre trappole trovate e chiuse**, tutte verificate con una misura e non per
+ragionamento:
 
-Da fare anche per gli altri dispositivi con configurazione propria: il bridge
-Zigbee SONOFF e il termostato BHT-6000, che hanno API diverse da verificare.
+1. **Campi volatili → un commit a vuoto al giorno.** Due letture a 3 secondi di
+   distanza differiscono su `unixtime`, `time`, `power`, `temperature`, contatori.
+   Vengono rimossi, le chiavi ordinate e indentate per diff leggibili. Verificato:
+   due raccolte consecutive producono file **identici**, e la pipeline completa
+   chiude con "nessuna modifica e nulla da inviare".
+2. **Il JSON contiene credenziali** — chiave WiFi in `wifi_sta`, utente e password
+   MQTT, credenziali del web locale in `login`. Controllate **per nome di campo,
+   senza mai stamparne il valore**. I file **non** sono nell'allowlist di
+   `.gitattributes`: `git-crypt status` conferma 12 file cifrati e 0 in chiaro.
+3. **L'avviso "dispositivi in meno" era cieco.** `collect-configs.sh` fa
+   `rm -rf guests/` prima della raccolta, quindi confrontare col filesystem dava
+   sempre "erano 0" e l'avviso non poteva scattare mai. Il termine di confronto si
+   legge da **git** (`git ls-files`), cioè dall'ultima raccolta committata.
+   Verificato togliendo un file a mano: l'avviso scatta e **nomina** il
+   dispositivo mancante.
+
+⚠️ **Un dispositivo spento risulta assente dalla cartella.** L'assenza non
+significa che non esista: significa che non rispondeva al momento della raccolta.
+Confrontare con l'inventario in `README.md`.
+
+**Resta da fare**: capire le API di `SONOFF-Zbridge-PRO` (bridge Zigbee: perdere
+la sua configurazione significa **riassociare tutti i dispositivi Zigbee**, quindi
+vale più degli Shelly) e del termostato `BHT-6000`.
 
 ### 4-ter. Backup remoto dei dati sul Synology di CASA
 **Fattibilita' misurata il 2026-08-11, in attesa di una configurazione su DSM.**
