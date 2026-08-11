@@ -356,7 +356,7 @@ agganciata, e questo è il nodo che ospita Home Assistant.
 
 | # | Voce | Rischio |
 |---|---|---|
-| 1 | `700` esplicito su `/root/infra`, `/root/infra-common`, `/root/.claude` | **nullo** — nessuno può restare chiuso fuori |
+| ~~1~~ | ✅ **FATTO 2026-08-11** — `700` su `/root/infra`, `/root/infra-common`, `/root/.claude` (erano `755`) | Verificato dopo: git allineato su entrambi i repo, collettore eseguito senza errori. Gira come root, quindi il `700` non gli toglie nulla |
 | 2 | 2FA TOTP su `root@pam` per la GUI | basso, ma tenere una via di recupero |
 | 3 | `PasswordAuthentication no` + `PermitRootLogin prohibit-password` in `/etc/ssh/sshd_config.d/` | ⚠️ **alto** |
 | 4 | Valutare l'ascolto di `8006`/`3128` limitato alla LAN e l'accensione del firewall del PVE | ⚠️ **alto** |
