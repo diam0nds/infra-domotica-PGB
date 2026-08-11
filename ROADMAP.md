@@ -163,6 +163,56 @@ già corrette da non toccare.
 - WPA3 (`sae-mixed`) sulle reti client, lasciando `psk2` su `PGB-IoT`
 - `hidden='0'` su `PGB-IoT`: nascondere l'SSID non protegge e crea instabilità
 
+### 1-quater. Messa in sicurezza e minimizzazione dati del comparto IoT
+**Richiesto dall'utente il 2026-08-11.** Obiettivo: garantire ai dispositivi il
+funzionamento, limitando al minimo le informazioni che inviano ai server dei
+produttori.
+
+**Principio guida**: non "bloccare il cloud" ma **renderlo inutile** — Home
+Assistant come unico hub locale, dispositivi senza uscita verso internet,
+accesso remoto dell'utente via WireGuard invece che via app del produttore.
+Compromesso da accettare consapevolmente: si perdono le app dei produttori e i
+comandi vocali che passano dal loro cloud.
+
+#### Inventario — 22 dispositivi nella VLAN IoT (2026-08-11)
+
+| IP | Dispositivo | Traffico verso internet (snapshot) |
+|---|---|---|
+| `.10` | SONOFF-Zbridge-PRO | — |
+| `.11`–`.14`, `.18`–`.21` | 8× Shelly 2.5 | **nessuno** |
+| `.15`, `.22` | 2× Shelly RGBW2 | **nessuno** |
+| `.16` | Shelly 1PM | **nessuno** |
+| `.17` | Shelly EM | **nessuno** |
+| `.23` | BHT-6000 termostato | — (tipicamente Tuya, cloud-dipendente) |
+| `.24`, `.25`, `.26` | 3× Midea clima | **AWS Global Accelerator :443** |
+| `.148` | Dreame robot (no lease statico) | **Alibaba Cloud :19973**, porta proprietaria |
+| `.125` | non identificato, no lease statico | da censire |
+| `.139` | **S24-di-Luca** — telefono sulla VLAN IoT | da spostare su `PGB`/`PGB-G` |
+
+⚠️ Lo snapshot è un istante: **non basta per decidere cosa staccare.** I Shelly
+*sembrano* già locali, ma va confermato su un periodo lungo.
+
+#### Lacuna che rende inefficace il filtro
+
+**Non esiste alcuna redirezione DNS per la VLAN IoT.** Un dispositivo con DNS
+cablato nel firmware (tipico di TV, robot, climatizzatori) bypassa AdGuard
+completamente. Vale già oggi, non solo per le future smart TV.
+
+#### Ordine di lavoro
+
+| # | Intervento | Rischio |
+|---|---|---|
+| 1 | **Profilazione traffico su 7 giorni** — campionamento leggero in RAM, aggregato per dispositivo: con chi parla, su che porte, con che frequenza | nullo |
+| 2 | **Redirezione DNS obbligatoria** della VLAN IoT verso AdGuard (DNAT su 53), efficace anche sui DNS cablati | molto basso |
+| 3 | **Blocco DoT/DoH** (853 + resolver noti): senza, un dispositivo aggira il filtro cifrando le query | basso |
+| 4 | **Redirezione NTP locale**: molti dispositivi hanno l'NTP cablato e lo usano per raggiungere l'esterno | basso |
+| 5 | **Uscita in default-deny** sulla VLAN IoT con permessi per singolo dispositivo, basati sui dati del punto 1 | **medio** — da fare solo con la profilazione in mano |
+| 6 | Censire `.125`, dare lease statico al Dreame, spostare il telefono fuori dalla VLAN IoT | nullo |
+| 7 | `isolate='1'` sulla SSID IoT | basso, da verificare sul campo |
+
+Il punto 5 senza il punto 1 è un tiro al buio: la dipendenza dal cloud si
+scoprirebbe quando il clima non risponde più.
+
 ### 2. Secondo AP e stabilità WiFi
 L'utente riferisce WiFi instabile in tutta la casa. L'AP (`192.168.15.2`,
 SIM SIMAX1800T, OpenWrt 24.10) è raggiungibile ma va verificato il suo ruolo:
