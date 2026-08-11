@@ -18,23 +18,50 @@ Dettagli in `README.md`, motivazioni in `decisions.md`.
 
 ---
 
+### Accesso SSH ai due router — 2026-08-08
+`ssh router-master` (192.168.15.1) e `ssh router-ap` (192.168.15.2) dal PVE,
+chiave dedicata `id_ed25519_infra`. Backup di entrambi operativo.
+
+### Secondo router individuato — 2026-08-08
+Non era un problema di indirizzi: era acceso ma **fuori dalla rete** (mesh a
+0 peer, nessun cavo). Ora a `192.168.15.2`, è un **SIM SIMAX1800T** con
+OpenWrt 24.10.0 — più recente del master. Dumb AP puro, trasparente per il DNS.
+
+### Rotazione chiavi WireGuard — 2026-08-08
+Le due private key del master erano state esposte per un mio errore di
+redazione. Entrambe rigenerate, i 3 client road-warrior e OPNsense aggiornati,
+tunnel site-to-site verificato funzionante.
+
+### Filtraggio DNS riparato — 2026-08-08
+Misurato: AdGuard vedeva solo il **7%** delle query, il resto usciva verso
+resolver pubblici senza filtro. Tre cause (`noresolv` mancante, `strictorder`
+mancante, un upstream morto). Corretto: ora **100%** delle query passa da
+AdGuard. Dettagli e trappole in `README.md`.
+
+### Watchdog DNS — 2026-08-08
+Installato `/usr/bin/dns-watchdog` sul master (fonte in
+`scripts/router/dns-watchdog.sh`), cron al minuto, in `sysupgrade.conf`.
+Riduce la finestra di disservizio da 8-14 giorni a ~2 minuti.
+
+### Backup dei router completato — 2026-08-08
+Raccoglieva solo `/etc/config`: si sarebbero persi script custom, cron,
+`authorized_keys`, `sysupgrade.conf` e l'elenco pacchetti. Ora tutto incluso.
+
+---
+
 ## In coda
 
-### 1. Accesso SSH ai due router OpenWrt
-Sblocca il backup delle loro configurazioni, l'individuazione dell'AP e
-l'analisi del DNS. Prerequisito di quasi tutto il resto.
-**Stato**: chiave pubblica consegnata all'utente, da incollare in LuCI.
+### 1. ⏳ Test di failover del watchdog — NON ancora eseguito
+**È l'unico pezzo del lavoro DNS non verificato.** Il watchdog è installato e
+in stato `attivo`, ma non è mai stato provato spegnendo AdGuard davvero.
 
-### 2. Individuare il secondo router (AP WiFi)
-Acceso ma non rintracciabile su `192.168.15.0/24`. Ipotesi: IP fuori subnet,
-verosimilmente il default OpenWrt `192.168.1.1`. Si risolve leggendo i lease
-DHCP dal master, una volta ottenuto l'accesso.
+Lezione dalla volta scorsa: la teoria diceva che `strictorder` garantiva il
+fallback, la misura ha detto 0 query risolte su 5. **Finché non è misurato,
+non è funzionante.**
 
-### 3. Mettere in sicurezza il DNS
-AdGuard gira sul PVE ed è il DNS della rete: quando il PVE va giù, la casa non
-naviga. Aggravato dal fatto che il PVE resta spento 8-14 giorni e che nessuno
-è sul posto per intervenire. Progettazione da fare dopo aver letto le config
-reali dei router. Vedi `README.md`.
+Test pronto in `/tmp/.../test-watchdog.sh` (scratchpad, va riscritto).
+Richiede ~6 minuti con una finestra di DNS degradato, quindi va fatto quando
+l'utente è sul posto e nessuno in casa sta usando la rete.
 
 ### 4. Backup dei dati di VM e container
 `/etc/pve/vzdump.cron` è vuoto: **non esiste alcun backup di VM e container**.
