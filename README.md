@@ -439,9 +439,46 @@ flash**, che su questi router è un bene di consumo.
 | AdGuard torna | `192.168.15.3` | riattivato |
 | Router appena riavviato | `1.1.1.1` | sospeso |
 
-Finestra di disservizio ridotta da **8-14 giorni a circa 2 minuti**.
-
 Installazione e ripristino: `scripts/router/README-watchdog.md`.
+
+### ✅ Test di failover superato — 2026-08-11
+
+Test end-to-end reale: container AdGuard spento, attesa della commutazione,
+verifica della risoluzione in stato degradato, riaccensione, verifica del
+rientro.
+
+| Fase | Esito |
+|---|---|
+| Baseline | upstream AdGuard, risolve 138 ms, filtro attivo |
+| AdGuard spento, +20s e +40s | **DNS non risolve** (rilevamento in corso) |
+| **Commutazione** | **dopo ~60 s** → `1.1.1.1`, risolve in 38 ms |
+| Stato degradato | **5/5 query risolte**, filtro sospeso come previsto |
+| AdGuard riaccesso | **rientro dopo ~40 s**, filtro riattivato |
+| Stato finale | normale, upstream AdGuard, filtro attivo |
+
+Log del watchdog, leggibile e inequivocabile:
+
+```
+dns-watchdog: AdGuard non risponde da 2 verifiche: ripiego su 1.1.1.1, filtraggio SOSPESO
+dns-watchdog: AdGuard risponde: torna unico upstream, filtraggio riattivato
+```
+
+**Finestra di disservizio: da 8-14 giorni a ~60 secondi.**
+
+Da notare l'asimmetria, che è voluta: prudente nel degradare (serve la conferma
+di 2 verifiche consecutive, per non sospendere il filtro a ogni singhiozzo) e
+rapido nel ripristinare (una sola verifica positiva basta).
+
+⚠️ **Resta una finestra reale di ~40-60 secondi senza DNS** dopo un guasto, che
+è il tempo di rilevamento. Riducibile portando `SOGLIA` a 1 nello script
+(~20-30 s) o eseguendo il watchdog due volte al minuto, ma entrambe le cose
+aumentano il rischio di sospendere il filtro per un singhiozzo transitorio. Con
+la finestra attuale il compromesso sembra corretto; se un giorno desse
+fastidio, si sa dove intervenire.
+
+Nota sui log: `crond` di BusyBox scrive le esecuzioni normali con facility
+`cron.err`. Le righe `cron.err crond[...]: USER root pid ... cmd
+/usr/bin/dns-watchdog` **non sono errori**, sono il normale avvio del cron.
 
 ### Il backup dei router era incompleto — corretto il 2026-08-08
 

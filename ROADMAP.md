@@ -51,17 +51,12 @@ Raccoglieva solo `/etc/config`: si sarebbero persi script custom, cron,
 
 ## In coda
 
-### 1. ⏳ Test di failover del watchdog — NON ancora eseguito
-**È l'unico pezzo del lavoro DNS non verificato.** Il watchdog è installato e
-in stato `attivo`, ma non è mai stato provato spegnendo AdGuard davvero.
+### 1. Il DNS è chiuso — verificato il 2026-08-11
+Test di failover completo superato: commutazione dopo ~60 s, 5/5 query risolte
+in stato degradato, rientro automatico dopo ~40 s. Dettagli in `README.md`.
 
-Lezione dalla volta scorsa: la teoria diceva che `strictorder` garantiva il
-fallback, la misura ha detto 0 query risolte su 5. **Finché non è misurato,
-non è funzionante.**
-
-Test pronto in `/tmp/.../test-watchdog.sh` (scratchpad, va riscritto).
-Richiede ~6 minuti con una finestra di DNS degradato, quindi va fatto quando
-l'utente è sul posto e nessuno in casa sta usando la rete.
+Resta una finestra di ~60 s senza DNS dopo un guasto (tempo di rilevamento).
+Riducibile, ma con più rischio di falsi positivi: per ora si lascia così.
 
 ### 4. Backup dei dati di VM e container
 `/etc/pve/vzdump.cron` è vuoto: **non esiste alcun backup di VM e container**.
