@@ -49,14 +49,74 @@ Raccoglieva solo `/etc/config`: si sarebbero persi script custom, cron,
 
 ---
 
-## In coda
-
-### 1. Il DNS è chiuso — verificato il 2026-08-11
+### Il DNS è chiuso — verificato il 2026-08-11
 Test di failover completo superato: commutazione dopo ~60 s, 5/5 query risolte
 in stato degradato, rientro automatico dopo ~40 s. Dettagli in `README.md`.
 
-Resta una finestra di ~60 s senza DNS dopo un guasto (tempo di rilevamento).
-Riducibile, ma con più rischio di falsi positivi: per ora si lascia così.
+Due strascichi minori, non bloccanti:
+- finestra di ~60 s senza DNS dopo un guasto (tempo di rilevamento). Riducibile,
+  ma con più rischio di falsi positivi: per ora si lascia così.
+- `10.9.0.1` rimosso dagli upstream perché non risponde alle query. Andrebbe
+  capito su OPNsense se lì doveva esserci un resolver: vedi punto 2.
+
+---
+
+## In coda — priorità concordate con l'utente il 2026-08-11
+
+### 1. VPN: nessuna delle due funziona
+L'utente riferisce che non funzionano né la VPN client né la site-to-site, e le
+chiama "OpenVPN". **Verificato: OpenVPN non è installato da nessuna parte** —
+né router master, né AP, né PVE, né container. Le VPN configurate sono due,
+entrambe **WireGuard**:
+
+| Interfaccia | Porta | Ruolo | Stato osservato |
+|---|---|---|---|
+| `wg0` | 51820 | road-warrior, 3 peer | **nessun handshake mai** |
+| `wg_site_sbt` | 51821 | site-to-site verso l'altra casa | funzionante l'11 ago |
+
+Ipotesi principale per `wg0`: la WAN del router è `192.168.51.2` con gateway
+`192.168.51.1`, cioè **doppio NAT** — c'è un router del provider a monte. Un
+client esterno non può raggiungere la porta 51820 se quel router non la
+inoltra. La site-to-site invece funziona perché è il nostro lato a iniziare la
+connessione verso l'endpoint remoto, con `persistent_keepalive`: non ha bisogno
+di alcun inoltro in ingresso.
+
+Da verificare: inoltro porte sul router del provider, eventuale DDNS per questo
+sito, regole firewall in ingresso su `wg0`, e se ci sia un OpenVPN **sull'altro
+capo** (OPNsense o Synology) che l'utente sta confondendo con questo.
+
+### 2. Secondo AP e stabilità WiFi
+L'utente riferisce WiFi instabile in tutta la casa. L'AP (`192.168.15.2`,
+SIM SIMAX1800T, OpenWrt 24.10) è raggiungibile ma va verificato il suo ruolo:
+il master ha `radio0` in mesh 802.11s con **0 peer**, quindi il mesh non è
+funzionante e l'AP presumibilmente lavora via cavo. Da chiarire prima di
+toccare i canali.
+
+Elementi già noti che possono contribuire all'instabilità: canale 1 fisso a
+2.4 GHz e HT20 sul master, SSID `PGB` presente sia sul master (5 GHz) sia
+sull'AP (entrambe le radio) senza che sia stato verificato il roaming.
+
+### 3. AdGuard Home: liste e configurazione
+Obiettivo dell'utente: filtri efficaci ma **sistema stabile e non appesantito**,
+con liste aggiornate ad agosto 2026. Obiettivo specifico: **filtrare la
+pubblicità sulle smart TV**.
+
+Vincoli da rispettare: il container ha 2 GB di RAM e gira su eMMC, quindi liste
+enormi sono controproducenti. Le smart TV richiedono attenzione particolare —
+molte usano DNS hardcoded (tipicamente 8.8.8.8) e vanno intercettate con una
+regola di redirezione sul router, altrimenti aggirano AdGuard del tutto.
+
+### 4. Backup dei dati di VM e container — RIPRESO IN CARICO
+`/etc/pve/vzdump.cron` è vuoto: **non esiste alcun backup di VM e container**.
+La VM Home Assistant è 32 GB di storico, automazioni e integrazioni, senza
+alcuna copia. I ~14 GB liberi nel volume group non bastano per un vzdump in
+locale: serve una destinazione esterna (NAS, disco USB, share di rete).
+
+⚠️ Il 9 agosto 2026 la macchina ha subito il quarto stacco di corrente a caldo
+documentato. Ogni episodio è una roulette sulla eMMC, che è l'unico disco e non
+è sostituibile. **Questo è il rischio più grave fra quelli aperti.**
+
+**Stato**: l'utente ha chiesto di rimandare ("segna il punto, poi ci torniamo").
 
 ### 4. Backup dei dati di VM e container
 `/etc/pve/vzdump.cron` è vuoto: **non esiste alcun backup di VM e container**.
