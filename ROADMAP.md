@@ -221,7 +221,45 @@ completamente. Vale già oggi, non solo per le future smart TV.
 Il punto 5 senza il punto 1 è un tiro al buio: la dipendenza dal cloud si
 scoprirebbe quando il clima non risponde più.
 
-### 2. Secondo AP e stabilità WiFi
+### ✅ 2. WiFi — Gruppi 1, 2 e 3 applicati il 2026-08-11
+
+Dettagli completi in `assessment-wifi.md` (cifrato). Sintesi:
+
+| Indicatore | Prima | Dopo |
+|---|---|---|
+| Client su **entrambi** i nodi | 3 | 1 |
+| Sovrapposizione canale 2.4 GHz | totale | **nessuna** (ch1 / ch11) |
+| Sovrapposizione canale 5 GHz | totale | **nessuna** (5180-5200 / 5220-5240) |
+| SSID inutili | `PGB-G` (0 client) | rimossa |
+| Mesh inerte | 1 interfaccia | rimossa |
+| Dominio regolatorio | `00` | `IT` |
+| Domotica collegata | 16-17 | **17/17** |
+
+Fatto anche: BSSID fissati con `macaddr`, `802.11k` su tutte le `PGB`.
+
+**Rimane da fare sul WiFi:**
+- Ridurre la potenza a 5 GHz del master (23 dBm): un client tiene ancora una
+  doppia associazione a −82 dBm, e la radio 5 GHz dell'AP è a 0 client
+- **802.11v**: richiede di sostituire `wpad-basic` con `wpad-full` su entrambi i
+  nodi. Senza, l'AP non può suggerire ai client di spostarsi
+- **Orologio dell'AP sbagliato** (log datati Feb 2025): NTP non sincronizzato,
+  rende i suoi log inutili per correlare eventi
+- **`PGB-IoT` sull'AP**: progetto VLAN a sé, vedi sotto
+
+### 2-bis. Progetto VLAN: portare la rete IoT sul cavo
+La rete IoT **non esiste sul cavo**: `192.168.16.1` vive direttamente
+sull'interfaccia WiFi del master, senza bridge né VLAN. L'AP ha solo `lan`.
+
+Serve: VLAN sullo switch del master (`swconfig`, 21.02), aggancio della rete IoT,
+VLAN corrispondente sull'AP (**DSA**, 24.10 — paradigma diverso), interfaccia IoT
+sull'AP, BSS `PGB-IoT` con chiave copiata senza leggerla.
+
+Cinque modifiche coordinate su due dispositivi con paradigmi diversi, sulla rete
+che porta 17 dispositivi di domotica, su un sito non presidiato. **Prerequisito**
+per ridurre la potenza a 2.4 GHz: oggi `corr-shelly25-faretti` è a −78 dBm e non
+ha alternative.
+
+### ~~2-ter~~. Secondo AP e stabilità WiFi
 L'utente riferisce WiFi instabile in tutta la casa. L'AP (`192.168.15.2`,
 SIM SIMAX1800T, OpenWrt 24.10) è raggiungibile ma va verificato il suo ruolo:
 il master ha `radio0` in mesh 802.11s con **0 peer**, quindi il mesh non è
