@@ -33,25 +33,41 @@ invece del sintomo.
 
 ---
 
-## 2026-08-11 — Site-to-site sulla porta locale 51900, non 51821
+## 2026-08-11 — Site-to-site resta sulla 51821, rimossa la regola DNAT
 
-**Decisione**: `network.wg_site_sbt.listen_port='51900'`.
+**Decisione**: `listen_port='51821'` (invariata) e **rimozione** della regola
+`WG-s2S`, che faceva DNAT di UDP 51821 verso `10.10.10.2` — l'indirizzo del
+router stesso sull'interfaccia del tunnel.
 
-**Motivo**: con 51821 il tunnel non saliva. Misurato: 31.703 pacchetti inviati
-verso l'endpoint corretto, **zero risposte**, flusso `[UNREPLIED]`. Cambiata la
-sola porta locale, handshake immediato e traffico bidirezionale.
+**Motivo**: il tunnel era fermo da giorni. Misurato: 31.703 pacchetti inviati
+verso l'endpoint corretto, zero risposte, flusso `[UNREPLIED]`. Disabilitata la
+regola DNAT, la 51821 funziona senza alcuna modifica: handshake immediato,
+traffico bidirezionale.
 
-Prima di arrivarci sono stati verificati e scartati, con misure e non per
-supposizione: chiavi di peer e di istanza da entrambi i lati, assenza di
-preshared key, porta di destinazione, DDNS, endpoint, raggiungibilità del sito
-remoto.
+Verificati e scartati prima, con misure: chiavi di peer e di istanza da entrambi
+i lati, assenza di preshared key, porta di destinazione, DDNS, endpoint,
+raggiungibilità del sito remoto.
 
-Causa probabile: inoltro statico o mappatura NAT residua su UDP 51821 sul
-router del provider, che impedisce l'uso di quella porta come sorgente in
-uscita. **Non ancora confermato** — richiede accesso a `192.168.51.1`.
+### ⚠️ Diagnosi intermedia sbagliata, da non ripetere
 
-**Non rimettere la 51821** senza aver prima chiarito e rimosso quella
-mappatura, altrimenti il tunnel torna giù.
+Per alcune ore la causa è stata attribuita alla **porta 51821**, perché
+cambiarla a 51900 faceva salire il tunnel. Conclusione errata: la porta nuova
+funzionava solo perché non veniva intercettata dal DNAT. Era stata anche
+ipotizzata una mappatura NAT residua sul router del provider — ipotesi
+infondata.
+
+Il DNAT era stato individuato *per primo* e poi indebolito con il ragionamento
+"il traffico ESTABLISHED non attraversa il DNAT, quindi non può essere lui".
+Quel ragionamento è **falso nei fatti**. Il meccanismo esatto resta non
+verificato; la misura è inequivocabile.
+
+**Lezione**: quando una misura contraddice un ragionamento teorico, vince la
+misura. Il vantaggio di mantenere l'ipotesi scartata sul tavolo è che il test
+del cambio porta — pensato per un'altra ragione — l'ha involontariamente
+confermata.
+
+Vantaggio pratico di restare sulla 51821: **non serve toccare nulla su
+OPNsense**, il cui endpoint punta già a quella porta.
 
 ---
 

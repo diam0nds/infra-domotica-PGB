@@ -124,11 +124,35 @@ menziona è quello del suo **ufficio**, estraneo a questi nodi.
 | `wg0` | 51820 | road-warrior, 3 peer | ✅ funzionante |
 | `wg_site_sbt` | **51900** | site-to-site verso la casa principale | ✅ funzionante |
 
-### ⚠️ La porta UDP 51821 in uscita NON funziona da questo sito
+### ⚠️ La causa era la regola DNAT `WG-s2S`, non la porta
 
 **Scoperta il 2026-08-11 dopo diverse ore di diagnosi.** Il tunnel
 site-to-site era fermo da giorni: 31.703 pacchetti inviati verso
 `31.189.79.110:52365`, **zero risposte**, flusso `[UNREPLIED]` in conntrack.
+
+Il colpevole era questa regola sul router:
+
+```
+WG-s2S:  DNAT, src=wan, udp dport 51821  ->  dest_ip=10.10.10.2, port 51821
+```
+
+`10.10.10.2` è l'indirizzo del router stesso sull'interfaccia del tunnel: la
+regola nasceva dal modello mentale sbagliato di "inoltrare a un host dietro il
+router", quando il destinatario era già il router.
+
+**Disabilitata la regola, la porta 51821 funziona senza problemi.** Handshake
+immediato, traffico bidirezionale.
+
+⚠️ Correzione di una diagnosi precedente: inizialmente questo documento
+attribuiva il problema alla porta 51821 (si era risolto cambiandola a 51900) e
+ipotizzava un conflitto NAT sul router del provider. **Era sbagliato.** Il
+cambio porta funzionava solo perché la nuova porta non era intercettata dal
+DNAT. La porta non ha nulla di speciale.
+
+Nota metodologica: il ragionamento con cui il DNAT era stato scartato — "il
+traffico ESTABLISHED non attraversa il DNAT, quindi non può essere lui" — si è
+rivelato **falso nei fatti**. Il meccanismo esatto non è stato verificato; la
+misura sì, ed è inequivocabile.
 
 Erano già stati verificati e scartati: chiavi (corrette da entrambi i lati,
 incluse quelle di istanza), preshared key (assenti da entrambi), porta di
