@@ -196,6 +196,36 @@ tempo di riassociazione più lento osservato; e non intervenire prima di 3
 minuti a meno che non ci siano segnali di guasto diversi dalla semplice assenza
 dei client.
 
+## 12-quinquies. Verificare che il build supporti un'opzione prima di impostarla
+
+`uci` accetta qualunque opzione: non valida nulla. È il demone che la legge a
+rifiutarla — e se la rifiuta, **non parte affatto**.
+
+*Episodio*: `bss_transition='1'` (802.11v) su un nodo con `wpad-basic`, che è
+compilato senza supporto WNM. hostapd ha risposto `unknown configuration item` e
+si è rifiutato di avviarsi: **WiFi dell'AP giù per 2 minuti**, entrambe le
+radio.
+
+**How to apply:** prima di impostare un'opzione poco comune, verificare che il
+pacchetto la supporti (`opkg list-installed | grep wpad` distingue le varianti
+`basic` da quelle `full`). Dopo ogni modifica a un demone, controllare
+`logread | grep -i "unknown configuration"`: è il sintomo che nessun'altra
+verifica rivela.
+
+**Correzione in avanti vs ripristino**: con un servizio già giù, rimuovere
+l'opzione colpevole e ricaricare è più rapido di un ripristino completo, e
+lascia in piedi il resto del lavoro. Il ripristino resta la scelta giusta quando
+non si sa *quale* modifica ha rotto.
+
+## 12-sexies. Ricaricare solo ciò che serve
+
+`wifi reload <radio>` ricarica una sola radio. Verificato: modificando la radio
+5 GHz del master, i 17 dispositivi di domotica sulla radio 2.4 GHz **non si sono
+mai scollegati** — 17 stazioni prima, 17 dopo.
+
+Un `wifi reload` senza argomenti riavvia tutte le radio del nodo e costa 90-165
+secondi di disservizio alla domotica. La forma selettiva lo azzera.
+
 ## 12-bis. La shell dei router è BusyBox `ash`, non bash
 
 Tre incompatibilità incontrate in una sola sessione, ognuna costata un
