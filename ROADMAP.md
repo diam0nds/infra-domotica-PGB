@@ -327,3 +327,64 @@ tre stacchi di corrente a caldo.
 ```bash
 apt install -y mmc-utils && mmc extcsd read /dev/mmcblk0 | grep -iE "life time|pre eol"
 ```
+
+### 10. Messa in sicurezza degli accessi al PVE
+**Richiesto dall'utente il 2026-08-11**, dopo aver notato che tutto il lavoro
+gira nella home di root. Fino a oggi la roadmap non aveva **nessuna** voce sugli
+accessi al PVE: l'unica sull'autenticazione era la 5 dell'assessment, che
+riguarda i router.
+
+Stato letto dai comandi l'11 agosto 2026:
+
+| Cosa | Stato |
+|---|---|
+| `PermitRootLogin` in sshd | **`yes`** |
+| `PasswordAuthentication` | non impostato → default Debian **`yes`** |
+| Utenti locali con shell valida | solo `root` |
+| Chiavi autorizzate per root | 2 |
+| Utenti PVE | uno solo, `root@pam`, **nessun 2FA** |
+| In ascolto | `22` su tutte le interfacce, `8006` (GUI), `3128` (SPICE) |
+| Firewall proprio del PVE | **disabilitato** |
+
+Cioè: **sul PVE si entra come root con una password**, e la GUI su 8006 è
+protetta dalla stessa password senza secondo fattore. Non è esposto su internet
+— gli inoltri verso il PVE sono stati rimossi e la zona IoT non raggiunge la LAN
+— quindi la superficie è LAN più VPN. Ma la VPN è il canale con cui CASA verrà
+agganciata, e questo è il nodo che ospita Home Assistant.
+
+**Da fare in quest'ordine:**
+
+| # | Voce | Rischio |
+|---|---|---|
+| 1 | `700` esplicito su `/root/infra`, `/root/infra-common`, `/root/.claude` | **nullo** — nessuno può restare chiuso fuori |
+| 2 | 2FA TOTP su `root@pam` per la GUI | basso, ma tenere una via di recupero |
+| 3 | `PasswordAuthentication no` + `PermitRootLogin prohibit-password` in `/etc/ssh/sshd_config.d/` | ⚠️ **alto** |
+| 4 | Valutare l'ascolto di `8006`/`3128` limitato alla LAN e l'accensione del firewall del PVE | ⚠️ **alto** |
+
+⚠️ I punti 3 e 4 sono le modifiche che, se sbagliate, **chiudono fuori da un
+sito vuoto**: vanno fatte **solo in finestra presidiata** e solo dopo aver
+confermato la chiave da ogni punto da cui serve entrare — stessa cautela della
+voce 5 sui router. Il punto 4 tocca l'interfaccia da cui si amministra.
+
+### Perché i repo restano nella home di root — 2026-08-11
+
+Valutato e **scartato** lo spostamento in `/srv` o `/opt`. Il working tree di git
+è **in chiaro**: git-crypt cifra gli oggetti del repo e ciò che va su GitHub, non
+i file su disco. `hosts/router-master/etc/config/wireless` è leggibile, con le
+password WiFi dentro.
+
+Le directory di lavoro sono `755`: **l'unica cosa che protegge password WiFi,
+hash di root e chiavi WireGuard in chiaro è il `700` di `/root`.** `/srv` e
+`/opt` nascono `755`, quindi lo spostamento senza rifare i permessi a mano
+*peggiora* la sicurezza — e non produce alcun messaggio d'errore.
+
+La ragione FHS per cui i dati di sito andrebbero in `/srv` resta valida in
+astratto. Va riaperta insieme alla voce 7 ("gestione centrale, **condivisa**"):
+se un'altra persona deve operare, `/root` la esclude per definizione. La risposta
+giusta lì non è mettere segreti in chiaro in una directory leggibile da tutti, ma
+un secondo account amministrativo e git come canale di condivisione.
+
+Girare come root non è una scelta rinviabile: `qm`, `pct`, la lettura di
+`/etc/pve` e la chiave verso i router lo richiedono, e su Proxmox l'identità
+amministrativa è `root@pam`. Un utente dedicato che poi usa `sudo` per quasi
+tutto lascia la superficie identica e aggiunge un pezzo che si rompe.
