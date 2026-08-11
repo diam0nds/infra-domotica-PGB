@@ -151,6 +151,33 @@ Regole che lo accompagnano:
   non riavvia nulla, perché un riavvio globale è peggio del problema
 - Firmware e `sysupgrade`: **mai** senza un via libera esplicito e la procedura
   di recupero TFTP pronta
+- **Cancellare sezioni uci anonime dall'indice più alto al più basso**: gli
+  indici si rinumerano a ogni cancellazione. Meglio ancora, creare le nuove
+  sezioni con un **nome esplicito** (`uci set firewall.iotsvc=rule`) così
+  restano indirizzabili
+- Quando si chiude una zona, **aggiungere i permessi prima** di mettere
+  `input=REJECT`, e verificare l'ordine in `iptables -L <catena> -n -v`: gli
+  ACCEPT devono precedere il REJECT finale
+
+## 12-bis. La shell dei router è BusyBox `ash`, non bash
+
+Tre incompatibilità incontrate in una sola sessione, ognuna costata un
+tentativo:
+
+| Non funziona | Sostituire con |
+|---|---|
+| `timeout <cmd>` | assente: affidarsi ai timeout propri del comando |
+| `cat -n`, `pgrep -c` | `awk '{print NR, $0}'`, `ps w \| grep -c` |
+| `read A B <<< "$(cmd)"` (herestring) | `S=$(cmd); A=${S%% *}; B=${S##* }` |
+
+E `nslookup` di BusyBox **esce con 0 anche se il server è morto**: va guardato
+l'output, non il codice di uscita.
+
+**Regola generale**: prima di dare per scontato un comando su OpenWrt,
+verificare che esista. Uno strumento di diagnosi che fallisce fa accusare il
+bersaglio sbagliato — è già successo tre volte in questo lavoro (i byte null in
+`verify-encryption.sh`, `jq` assente sul PVE letto come JSON non valido,
+`timeout` assente letto come "AdGuard non risponde").
 
 ## 13. Proporre, aspettare l'ok, poi agire
 

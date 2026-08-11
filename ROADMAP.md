@@ -146,9 +146,9 @@ già corrette da non toccare.
 | # | Voce | Note |
 |---|---|---|
 | ~~1~~ | ✅ **FATTO 2026-08-11** — `Allow HOME ASSISTANT from IoT VLAN`: `dest_ip` da `192.168.15.3` a `.4` | Verificato prima: nessun flusso IoT→AdGuard, quindi nessuna rottura. Dopo: 15 flussi IoT→HA attivi, 0 riferimenti a `.3` in iptables, DNS/filtro/tunnel intatti. Applicato con ripristino armato |
-| 2 | Rimuovere il port forward `HomeAssistant` (wan:443 → .3) | Inerte, e correggerlo esporrebbe HA su internet |
-| 3 | `IoTZone input=REJECT` + permessi espliciti per 53/67 | Oggi i 17 dispositivi IoT raggiungono SSH e LuCI del router |
-| 4 | `uhttpd redirect_https='1'` e ascolto solo su interfaccia di gestione | Password di amministrazione in chiaro su HTTP |
+| ~~2~~ | ✅ **FATTO 2026-08-11** — rimossi **due** redirect morti: `HomeAssistant` (wan:443 → .3, porta chiusa, 0 flussi attivi) e `WG-s2S` (DNAT verso l'IP del router stesso, già disabilitato) | Verificato prima che fossero inerti. Dopo: 0 redirect, 0 DNAT in iptables, tunnel/DNS/client VPN intatti |
+| ~~3~~ | ✅ **FATTO 2026-08-11** — `IoTZone input=REJECT` + regola **nominata** `firewall.iotsvc` che permette `53 67 68 123` | Misurato prima: i dispositivi IoT contattano il router **solo sulla 53**. Aggiunti i permessi *prima* di chiudere. Catena verificata: ACCEPT precedono il REJECT finale |
+| ~~4~~ | ✅ **FATTO 2026-08-11** — `uhttpd redirect_https='1'` | Verificato prima che cert e key esistessero, altrimenti LuCI diventava irraggiungibile. Dopo: HTTP risponde `307` → `https://`. **Ascolto sulle interfacce lasciato invariato**: la chiusura della zona IoT ottiene la stessa protezione senza rischio di autoesclusione |
 | 5 | `dropbear PasswordAuth='off'` e `RootPasswordAuth='off'` | **Solo dopo** aver confermato la chiave da ogni punto |
 | 6 | `flow_offloading='1'` (software) | Guadagno maggiore di prestazioni su mt7621 |
 | 7 | Log persistenti (`log_size` + collettore) | I log del blackout del 9 ago erano già stati sovrascritti |
