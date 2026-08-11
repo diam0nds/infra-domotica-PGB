@@ -33,6 +33,28 @@ invece del sintomo.
 
 ---
 
+## 2026-08-11 — Site-to-site sulla porta locale 51900, non 51821
+
+**Decisione**: `network.wg_site_sbt.listen_port='51900'`.
+
+**Motivo**: con 51821 il tunnel non saliva. Misurato: 31.703 pacchetti inviati
+verso l'endpoint corretto, **zero risposte**, flusso `[UNREPLIED]`. Cambiata la
+sola porta locale, handshake immediato e traffico bidirezionale.
+
+Prima di arrivarci sono stati verificati e scartati, con misure e non per
+supposizione: chiavi di peer e di istanza da entrambi i lati, assenza di
+preshared key, porta di destinazione, DDNS, endpoint, raggiungibilità del sito
+remoto.
+
+Causa probabile: inoltro statico o mappatura NAT residua su UDP 51821 sul
+router del provider, che impedisce l'uso di quella porta come sorgente in
+uscita. **Non ancora confermato** — richiede accesso a `192.168.51.1`.
+
+**Non rimettere la 51821** senza aver prima chiarito e rimosso quella
+mappatura, altrimenti il tunnel torna giù.
+
+---
+
 ## 2026-08-08 — Niente stack di monitoraggio
 
 **Decisione**: nessun Prometheus / Grafana / InfluxDB / Zabbix.

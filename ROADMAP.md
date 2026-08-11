@@ -63,7 +63,24 @@ Due strascichi minori, non bloccanti:
 
 ## In coda — priorità concordate con l'utente il 2026-08-11
 
-### 1. VPN: nessuna delle due funziona
+### VPN risolte — 2026-08-11
+Entrambe funzionanti. `wg0` aveva la chiave del server sbagliata nel config del
+client; la site-to-site era bloccata dalla porta locale 51821 (cambiata a
+51900). Dettagli e trappole in `README.md`.
+
+**Rifiniture rimaste, non urgenti:**
+- Aggiornare l'endpoint del nostro peer su OPNsense da `:51821` a `:51900`, così
+  anche la casa principale può iniziare il tunnel. Oggi sale solo perché lo
+  iniziamo noi.
+- Aggiungere `192.168.16.0/24` (IoT) agli allowed IPs del nostro peer su
+  OPNsense: senza, dalla casa principale non si raggiunge la domotica di qui.
+- Rimuovere la regola `firewall.@redirect[1]` (`WG-s2S`): fa DNAT di UDP 51821
+  verso `10.10.10.2`, che è il router stesso. Ora è anche riferita a una porta
+  non più in uso. È peso morto che confonde.
+- Chiarire l'inoltro su UDP 51821 sul router del provider, che è la causa
+  probabile del blocco. Finché non è chiarito, **non riusare quella porta**.
+
+### 1. ~~VPN: nessuna delle due funziona~~ — RISOLTO, vedi sopra
 L'utente riferisce che non funzionano né la VPN client né la site-to-site, e le
 chiama "OpenVPN". **Verificato: OpenVPN non è installato da nessuna parte** —
 né router master, né AP, né PVE, né container. Le VPN configurate sono due,

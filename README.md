@@ -114,6 +114,61 @@ tenere presente quando si progetterà l'integrazione delle due domotiche.
 | `PGB-IoT` | 2.4 GHz | IoT | 17 dispositivi collegati |
 | — | 2.4 GHz | lan | mesh 802.11s, `mesh_id='my-mesh'`, **0 peer** |
 
+## VPN — WireGuard
+
+⚠️ **Non c'è nessun OpenVPN in questa infrastruttura.** L'OpenVPN che l'utente
+menziona è quello del suo **ufficio**, estraneo a questi nodi.
+
+| Interfaccia | Porta locale | Ruolo | Stato |
+|---|---|---|---|
+| `wg0` | 51820 | road-warrior, 3 peer | ✅ funzionante |
+| `wg_site_sbt` | **51900** | site-to-site verso la casa principale | ✅ funzionante |
+
+### ⚠️ La porta UDP 51821 in uscita NON funziona da questo sito
+
+**Scoperta il 2026-08-11 dopo diverse ore di diagnosi.** Il tunnel
+site-to-site era fermo da giorni: 31.703 pacchetti inviati verso
+`31.189.79.110:52365`, **zero risposte**, flusso `[UNREPLIED]` in conntrack.
+
+Erano già stati verificati e scartati: chiavi (corrette da entrambi i lati,
+incluse quelle di istanza), preshared key (assenti da entrambi), porta di
+destinazione (52365, confermata da un client funzionante sulla stessa porta),
+DDNS (corretto su tre resolver), endpoint (corretti da entrambi i lati),
+raggiungibilità della casa principale (una connessione TCP verso di lei
+funzionava nello stesso momento).
+
+**La soluzione è stata cambiare la porta LOCALE da 51821 a 51900.** Handshake
+immediato, traffico bidirezionale, reti remote raggiungibili in ~15 ms.
+
+Causa probabile: sul router del provider (`192.168.51.1`) esiste
+verosimilmente un inoltro statico o una mappatura NAT residua su UDP 51821 che
+impedisce di usare quella porta come **sorgente** per il traffico in uscita.
+Da confermare guardando gli inoltri di quel router.
+
+**Se un tunnel non sale pur avendo tutto corretto, provare a cambiare la porta
+locale prima di continuare a cercare errori di configurazione.**
+
+### Asimmetria da tenere presente
+
+Su `wg0` il router **risponde** a client che arrivano da fuori; sulla
+site-to-site è il router a **iniziare**. Per mesi non è mai stata verificata la
+capacità di questo router di iniziare un handshake in uscita — ed era proprio
+lì il problema. Le due direzioni vanno testate separatamente.
+
+### Errore trovato nella configurazione dei client
+
+Il client `NB-LDIAMANTI` aveva, nella sezione `[Peer]`, **la propria chiave
+pubblica** invece di quella del router. Handshake impossibile. Nella sezione
+`[Peer]` va la chiave del server:
+
+```
+PublicKey = eV+nkZm3fZK2T0kJhADO2VQOnkugKdhwQx1mJQffyX4=   (chiave di wg0)
+DNS       = 192.168.9.1                                     (indirizzo del router su wg0)
+```
+
+Corretto questo, il client si è collegato — dimostrando anche che l'inoltro di
+UDP 51820 sul router del provider **esiste e funziona**.
+
 ## Host: `pve`
 
 | | |
