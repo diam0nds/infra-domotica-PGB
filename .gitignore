@@ -1,3 +1,9 @@
 *.tmp
 *.swp
 .DS_Store
+
+# Immagini firmware e pacchetti: binari grandi, riscaricabili con hash verificato.
+# Nel repo restano il RUNBOOK, il backup della config e gli hash.
+upgrade/**/*.bin
+upgrade/**/pacchetti/
+upgrade/**/target.manifest
