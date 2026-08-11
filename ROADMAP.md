@@ -3,9 +3,17 @@
 Lavori concordati con l'utente, in ordine di priorità. Le voci completate
 restano qui con la data, così si vede cosa è già stato fatto e quando.
 
-> **Contesto**: questa è la domotica di una **seconda casa**, sito remoto e non
-> presidiato per settimane. La destinazione finale è agganciarla alla domotica
-> della casa principale, che non è ancora stata analizzata.
+> **Contesto**: questa è la domotica di **PGB**, la seconda casa: sito remoto e
+> **di norma** non presidiato per settimane. La destinazione finale è
+> agganciarla alla domotica di **CASA**, il cui assessment è iniziato il
+> 2026-08-12.
+>
+> ⚠️ "Di norma" non significa "sempre": la modalità **va chiesta a ogni
+> sessione** e registrata qui sotto, perché decide cosa è prudente.
+>
+> | Data | Modalità | Lavoro svolto |
+> |---|---|---|
+> | 2026-08-12 | **presidiata** | correzioni a questa roadmap dopo l'assessment di CASA; nessuna modifica agli apparati |
 
 ---
 
@@ -65,20 +73,46 @@ Due strascichi minori, non bloccanti:
 
 ### VPN risolte — 2026-08-11
 Entrambe funzionanti. `wg0` aveva la chiave del server sbagliata nel config del
-client; la site-to-site era bloccata dalla porta locale 51821 (cambiata a
-51900). Dettagli e trappole in `README.md`.
+client; la site-to-site era bloccata da una regola **DNAT** (`WG-s2S`), poi
+rimossa. Dettagli e trappole in `README.md`, decisione in `decisions.md`
+(2026-08-11 12:29).
+
+⚠️ **Correzione a quanto era scritto qui prima — 2026-08-12.** Questa voce
+diceva «la site-to-site era bloccata dalla porta locale 51821 (cambiata a
+51900)» e chiedeva fra le rifiniture di aggiornare l'endpoint su OPNsense a
+`:51900`. **Era falso, e seguirlo avrebbe rotto il tunnel dal lato di CASA.**
+
+La porta **non è mai cambiata**: la causa era il DNAT, come `decisions.md`
+registra già dall'11 agosto. Misure del 2026-08-12 che lo confermano:
+
+| Misura | Dove | Esito |
+|---|---|---|
+| `uci show network` | PGB | `network.wg_site_sbt.listen_port='51821'` |
+| `wg show` | PGB | `listening port: 51821`, handshake 1 min fa |
+| `wg show` | CASA (OPNsense) | peer PGB su `:51821`, handshake 1 min fa, ~11/10 MiB scambiati |
+
+Il cambio a 51900 era stato provato durante la diagnosi e **poi annullato**; la
+riga 92 di questo stesso file riportava già `51821 | funzionante`. Lezione §2 e
+§9 del MODUS-OPERANDI: la porta era la variabile cambiata *insieme* al DNAT, e
+si è presa la coincidenza per la causa. **Vince la misura locale, non questo
+documento.**
 
 **Rifiniture rimaste, non urgenti:**
-- Aggiornare l'endpoint del nostro peer su OPNsense da `:51821` a `:51900`, così
-  anche la casa principale può iniziare il tunnel. Oggi sale solo perché lo
-  iniziamo noi.
+- ~~Aggiornare l'endpoint del nostro peer su OPNsense da `:51821` a `:51900`~~ —
+  **da NON fare**, vedi la correzione qui sopra. L'endpoint su OPNsense è già
+  giusto e il tunnel sale in entrambe le direzioni.
 - Aggiungere `192.168.16.0/24` (IoT) agli allowed IPs del nostro peer su
-  OPNsense: senza, dalla casa principale non si raggiunge la domotica di qui.
-- Rimuovere la regola `firewall.@redirect[1]` (`WG-s2S`): fa DNAT di UDP 51821
-  verso `10.10.10.2`, che è il router stesso. Ora è anche riferita a una porta
-  non più in uso. È peso morto che confonde.
-- Chiarire l'inoltro su UDP 51821 sul router del provider, che è la causa
-  probabile del blocco. Finché non è chiarito, **non riusare quella porta**.
+  OPNsense: senza, da CASA non si raggiunge la domotica di qui. ⚠️ Da
+  **coordinare** con l'apertura del forwarding su PGB (vedi 1-ter, "scelte da
+  fare consapevolmente"): una delle due modifiche da sola non produce
+  connettività utile. La modifica su OPNsense si fa **in una sessione su CASA**.
+- ~~Rimuovere la regola `firewall.@redirect[1]` (`WG-s2S`)~~ — **già fatta il
+  2026-08-11**, vedi 1-ter punto 2. Verificato il 2026-08-12:
+  `uci show firewall | grep -i redirect` non restituisce **nulla**, zero regole
+  di redirect sul master.
+- Chiarire l'inoltro su UDP 51821 sul router del provider. Nota: non era la
+  causa del blocco della site-to-site (lo era il DNAT), ma resta da capire per
+  `wg0`, che è il tunnel che ha bisogno di essere raggiunto dall'esterno.
 
 ### 1. ~~VPN: nessuna delle due funziona~~ — RISOLTO, vedi sopra
 L'utente riferisce che non funzionano né la VPN client né la site-to-site, e le
@@ -89,7 +123,7 @@ entrambe **WireGuard**:
 | Interfaccia | Porta | Ruolo | Stato osservato |
 |---|---|---|---|
 | `wg0` | 51820 | road-warrior, 3 peer | **nessun handshake mai** |
-| `wg_site_sbt` | 51821 | site-to-site verso l'altra casa | funzionante l'11 ago |
+| `wg_site_sbt` | 51821 | site-to-site verso **CASA** | funzionante, riconfermato il 12 ago |
 
 Ipotesi principale per `wg0`: la WAN del router è `192.168.51.2` con gateway
 `192.168.51.1`, cioè **doppio NAT** — c'è un router del provider a monte. Un
@@ -157,8 +191,18 @@ già corrette da non toccare.
 
 **Scelte da fare consapevolmente, non urgenti:**
 - SQM/`cake` per il bufferbloat su FWA — **alternativo** all'offloading hardware
-- `s2sVPN -> lan`: oggi manca, quindi la casa principale non raggiunge i nostri
-  host. Incompatibile con l'integrazione delle due domotiche
+- `s2sVPN -> lan`: oggi manca, quindi **CASA non raggiunge i nostri host**.
+  Incompatibile con l'integrazione delle due domotiche. **Misurato da CASA il
+  2026-08-12**: dal tunnel si raggiunge `192.168.15.1` (il router, che è
+  l'endpoint del tunnel) ma **non** `192.168.15.5` — né ping né TCP. Forwarding
+  presenti sul master, letti il 2026-08-12: `lan→wan`, `lan→IoTZone`,
+  `lan→s2sVPN`, `GuestZone→wan`, `IoTZone→wan`, `s2sVPN→wan`. Manca
+  `s2sVPN→lan`, e manca anche `s2sVPN→IoTZone`.
+  **Proposta, in attesa di ok**: non aprire la zona per intero ma una regola
+  **nominata** e puntuale verso il solo Home Assistant (`192.168.15.4`), sulle
+  porte che servono. Da coordinare con gli allowed IPs lato OPNsense (voce VPN
+  qui sopra): le due modifiche insieme, una per volta, ciascuna con
+  `safe-change.sh` armato
 - `isolate='1'` su IoT e Guest — da provare, alcuni dispositivi usano scoperta fra pari
 - WPA3 (`sae-mixed`) sulle reti client, lasciando `psk2` su `PGB-IoT`
 - `hidden='0'` su `PGB-IoT`: nascondere l'SSID non protegge e crea instabilità
@@ -389,8 +433,68 @@ che non è la stessa cosa di un export ripristinabile su un coordinatore nuovo.
 Il termostato è già nello stato che cerchiamo per l'IoT: **nessuna connessione
 esterna**, unica uscita MQTT verso `192.168.15.4:1883`. Zero cloud.
 
+### 4-ter. ✅ Export della rete Zigbee — FATTO 2026-08-12
+
+**Sessione presidiata.** `infra-common/scripts/collect-zigbee2mqtt.sh`, integrato
+nella raccolta giornaliera.
+
+Rete: **canale 11, pan_id a4ed, 4 dispositivi** (1 router, 3 end device) più il
+coordinatore. Piccola, ma ora coperta con l'artefatto giusto:
+`coordinator_backup.json` è in formato **`zigpy/open-coordinator-backup`**, che
+si ripristina anche su un coordinatore **diverso** — cosa che l'immagine vzdump
+della VM 100 non permette.
+
+**Come ci si arriva**: il broker MQTT non accetta connessioni anonime e la
+password non è disponibile; l'API REST di Home Assistant non sa sottoscrivere
+topic MQTT; il proxy Supervisor rifiuta i token a lunga durata con **401**.
+Resta l'API **WebSocket** di Home Assistant, per la quale sul PVE non esiste
+nessuna libreria (`websockets`, `websocket-client`, `aiohttp`: tutte assenti).
+Scritto `scripts/lib/hawsapi.py`, client RFC 6455 minimo in Python puro — niente
+pacchetti installati sull'eMMC. Serve anche per il registro entità.
+
+**Due normalizzazioni, entrambe trovate misurando e non ragionando:**
+
+1. `coordinator_backup.json` cambia a ogni lettura per **un solo campo**,
+   `metadata.internal.date`. Rimosso.
+2. `database.db` contiene **telemetria**: `lastSeen` e la cache delle ultime
+   letture nei cluster di misura (temperatura 2840→2820, umidità 5280→5200,
+   batteria). Rimossa la cache dei cluster **tranne `genBasic`**, che porta
+   l'identità del dispositivo. Restano intatti endpoint, cluster dichiarati,
+   `binds`, `configuredReportings` e stato dell'interview: tutto ciò che serve
+   al ripristino. La cache Zigbee2MQTT la ricostruisce al primo contatto.
+
+`state.json` è escluso di proposito: stato di esercizio, non configurazione.
+
+⚠️ Contiene la **chiave di rete Zigbee**: resta cifrato, fuori dall'allowlist.
+Verificato con `git check-attr`.
+
+### Il termostato BHT-6000 non era il problema
+
+**Verificato il 2026-08-12 via API di Home Assistant.** `climate.bht_6000_termost`
+esiste ed è **funzionante**: stato `off`, temperatura 26,0 °C (coincide con i
+26,5 letti sul dispositivo), target 19,0 °C. La discovery MQTT ha funzionato.
+
+Il difetto è di **presentazione**: le entità hanno identificativi generici —
+`sensor.temperature`, `sensor.ip`, `sensor.wifi_rssi` — che non identificano il
+dispositivo e un domani possono collidere. Si rinominano in Home Assistant senza
+toccare il termostato.
+
+**Il problema vero è un altro**: i tre condizionatori Midea sono tutti
+`unavailable`.
+
+| Entità | Nome | Stato |
+|---|---|---|
+| `climate.152832116743627_climate` | Split Sala | unavailable |
+| `climate.153931628431736_climate` | Split-camera | unavailable |
+| `climate.153931628431734_climate` | Split-corridoio | unavailable |
+
+Sono gli stessi che nel censimento IoT risultano **senza server HTTP locale,
+solo client verso il cloud**. Da affrontare a parte: se l'integrazione passa dal
+cloud del produttore, va contro l'obiettivo di minimizzazione dei dati.
+
 ### 4-ter. Backup remoto dei dati sul Synology di CASA
-**Fattibilita' misurata il 2026-08-11, in attesa di una configurazione su DSM.**
+**Fattibilita' misurata il 2026-08-11. Configurazione DSM fatta e verificata il
+2026-08-12: l'esportazione esiste, resta da montarla e usarla.**
 
 | Verifica | Esito |
 |---|---|
@@ -401,18 +505,41 @@ esterna**, unica uscita MQTT verso `192.168.15.4:1883`. Zero cloud.
 | Tempo stimato per 1,7 GB | **~15 minuti** |
 | Cifratura in transito | garantita dal tunnel WireGuard |
 
-**Ostacolo residuo**: nessuna esportazione include `192.168.15.5`.
+✅ **Ostacolo rimosso — configurazione DSM fatta, verificata il 2026-08-12.**
+`showmount -e` sul Synology, eseguito dal PVE di PGB attraverso il tunnel:
 
 ```
-/volume1/video   ->  192.168.10.0/24
-/volume1/File    ->  192.168.10.6      (solo il PVE di CASA)
+/volume1/video       ->  192.168.10.0/24
+/volume1/backup-pgb  ->  192.168.15.5      <-- nuova, per noi
+/volume1/File        ->  192.168.10.6      (solo il PVE di CASA)
 ```
+
+È stata scelta la strada del **privilegio minimo**: `backup-pgb` è una cartella
+condivisa a sé, esportata al solo `192.168.15.5`, non un permesso su `File`.
+Spazio dichiarato dal lato CASA: **1,3 TB liberi**, contro ~14 GB di ritenzione
+piena. Il fatto che il PVE risolva l'export conferma anche che il tunnel regge
+le RPC, non solo il ping.
 
 ⚠️ **Su Synology i permessi NFS si impostano per cartella condivisa, non per
 sottocartella.** Creare `File/backup-pgb` non produce alcuna esportazione: il
-montaggio resta rifiutato, verificato su entrambi i percorsi. Serve o un permesso
-NFS su `File` (che esporrebbe **tutta** la condivisione), o rendere `backup-pgb`
-una cartella condivisa a se' stante — preferibile, per privilegio minimo.
+montaggio resta rifiutato, verificato su entrambi i percorsi. Resta scritto
+perché è la trappola che ha fatto perdere il primo tentativo.
+
+**Prossimo passo, in attesa di ok** (nessuna modifica agli apparati di rete,
+tutto lato PVE):
+
+1. Montare con **NFSv3** — il Synology rifiuta `vers=4.1`, già misurato
+2. Misurare un trasferimento **reale**, non stimato: la stima è ~15 min per
+   1,7 GB a 2,0 MB/s, ma va vista
+3. Aggiungere la copia `rsync` **dopo** il job `pgb-daily`, non un job PVE
+   puntato sullo storage remoto (motivo qui sopra: snapshot aperto 15 min)
+4. Registrare lo storage in PVE per poter ripristinare dall'interfaccia
+5. **Provare un ripristino dalla copia remota**, come già fatto per quella
+   locale — §4 del MODUS-OPERANDI: un backup non ripristinato non è un backup
+
+⚠️ Il difetto da non replicare: su CASA uno script custom di backup ha fallito
+**in silenzio per undici mesi**. Qualunque cosa si aggiunga qui deve segnalare
+il proprio guasto da sé, come fa `collect-configs.sh` con `BACKUP-FALLITO.txt`.
 
 **Architettura scelta**: backup locale (gia' attivo) **piu'** copia `rsync`
 successiva, non un job PVE puntato direttamente sullo storage remoto. Motivo: a
