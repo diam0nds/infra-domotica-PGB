@@ -320,6 +320,70 @@ la macchina è spenta alle 02:30 quel backup salta — stesso difetto già visto
 backup delle configurazioni, là risolto con un `@reboot`. Qui non c'è un
 equivalente nativo.
 
+### 4-bis. Backup della configurazione dei dispositivi Shelly
+**Richiesto dall'utente il 2026-08-11.**
+
+I 12 Shelly non hanno nessun backup della loro configurazione: se uno si guasta e
+viene sostituito, orari, calibrazione delle tapparelle, nomi dei relè e
+impostazioni MQTT vanno ricostruiti a mano uno per uno.
+
+**Fattibilità verificata**: il PVE raggiunge la VLAN IoT (la regola
+`lan -> IoTZone` esiste) e l'API Gen1 risponde in sola lettura:
+
+```
+http://192.168.16.11/settings  ->  2960 byte di JSON, "device":{"type":"SHSW-25"
+```
+
+`192.168.16.17` (CORR-SHELLY-EM) non risponde: e' quello gia' guasto, non un
+limite del metodo.
+
+**Come**: estendere `collect-configs.sh` con un passo che scarica `/settings` da
+ogni indirizzo `192.168.16.x` censito nei lease statici e lo salva in
+`guests/shelly/<nome>.json`. Nessuna scrittura sui dispositivi, nessun agente
+installato, poche decine di KB per l'intero parco.
+
+⚠️ Il JSON di `/settings` puo' contenere credenziali WiFi e MQTT: deve finire
+nella parte **cifrata** del repo, cioe' non va aggiunto all'allowlist di
+`.gitattributes`. Verificare con `verify-no-secrets.sh` prima del primo push.
+
+Da fare anche per gli altri dispositivi con configurazione propria: il bridge
+Zigbee SONOFF e il termostato BHT-6000, che hanno API diverse da verificare.
+
+### 4-ter. Backup remoto dei dati sul Synology di CASA
+**Fattibilita' misurata il 2026-08-11, in attesa di una configurazione su DSM.**
+
+| Verifica | Esito |
+|---|---|
+| PVE -> Synology attraverso il tunnel | ✅ 16,5 ms |
+| Il Synology ci vede come | **192.168.15.5** (nessun masquerade sul tunnel, provato in conntrack) |
+| NFS sul Synology | ✅ attivo, due esportazioni esistenti |
+| Banda in salita di PGB | **16,8 Mbps / 2,0 MB/s** |
+| Tempo stimato per 1,7 GB | **~15 minuti** |
+| Cifratura in transito | garantita dal tunnel WireGuard |
+
+**Ostacolo residuo**: nessuna esportazione include `192.168.15.5`.
+
+```
+/volume1/video   ->  192.168.10.0/24
+/volume1/File    ->  192.168.10.6      (solo il PVE di CASA)
+```
+
+⚠️ **Su Synology i permessi NFS si impostano per cartella condivisa, non per
+sottocartella.** Creare `File/backup-pgb` non produce alcuna esportazione: il
+montaggio resta rifiutato, verificato su entrambi i percorsi. Serve o un permesso
+NFS su `File` (che esporrebbe **tutta** la condivisione), o rendere `backup-pgb`
+una cartella condivisa a se' stante — preferibile, per privilegio minimo.
+
+**Architettura scelta**: backup locale (gia' attivo) **piu'** copia `rsync`
+successiva, non un job PVE puntato direttamente sullo storage remoto. Motivo: a
+2 MB/s `vzdump` terrebbe aperto lo snapshot della VM per 15 minuti invece di 6, e
+un singhiozzo del tunnel farebbe fallire anche la copia locale che sarebbe
+riuscita. Con la copia separata, un tunnel giu' fa saltare solo la replica.
+
+Da fare dopo la configurazione DSM: montare, misurare un trasferimento **reale**,
+aggiungere la copia dopo il job, registrare come storage PVE per i ripristini da
+interfaccia, e **provare un ripristino dalla copia remota**.
+
 ### 5. Riavvio automatico dopo blackout
 BIOS `Restore on AC Power Loss` da `Power Off` a `Power On`. L'utente
 interverrà appena avrà una tastiera USB. Vie software già valutate e scartate,
