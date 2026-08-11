@@ -19,4 +19,10 @@
 README.md       !filter !diff
 decisions.md    !filter !diff
 ROADMAP.md      !filter !diff
+MODUS-OPERANDI.md !filter !diff
 scripts/**      !filter !diff
+
+# NOTA: assessment-router-master.md resta CIFRATO di proposito.
+# E' un elenco ragionato di debolezze con porte, versioni e percorsi: e' il file
+# il cui trapelare farebbe piu' danno. La logica fail-safe lo cifra da sola,
+# semplicemente non aggiungendolo qui sopra.

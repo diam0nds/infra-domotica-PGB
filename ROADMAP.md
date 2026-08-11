@@ -134,6 +134,35 @@ lo stesso problema visto da due lati — oggi questa casa è raggiungibile
 dall'esterno solo se il PVE è accesso *e* se qualcuno ha configurato gli
 inoltri.
 
+### 1-ter. Interventi dall'assessment del router master — 2026-08-11
+Assessment completo in `assessment-router-master.md` (**cifrato**: è un elenco
+di debolezze, è il file il cui trapelare farebbe più danno).
+
+Sintesi: 4 voci di gravità alta, 6 media, 5 bassa, 6 di ottimizzazione, 8 cose
+già corrette da non toccare.
+
+**Da fare in quest'ordine:**
+
+| # | Voce | Note |
+|---|---|---|
+| 1 | Regola `Allow HOME ASSISTANT from IoT VLAN` → cambiare `dest_ip` da `192.168.15.3` a `.4` | **Rompe la domotica adesso** e apre un accesso non voluto ad AdGuard |
+| 2 | Rimuovere il port forward `HomeAssistant` (wan:443 → .3) | Inerte, e correggerlo esporrebbe HA su internet |
+| 3 | `IoTZone input=REJECT` + permessi espliciti per 53/67 | Oggi i 17 dispositivi IoT raggiungono SSH e LuCI del router |
+| 4 | `uhttpd redirect_https='1'` e ascolto solo su interfaccia di gestione | Password di amministrazione in chiaro su HTTP |
+| 5 | `dropbear PasswordAuth='off'` e `RootPasswordAuth='off'` | **Solo dopo** aver confermato la chiave da ogni punto |
+| 6 | `flow_offloading='1'` (software) | Guadagno maggiore di prestazioni su mt7621 |
+| 7 | Log persistenti (`log_size` + collettore) | I log del blackout del 9 ago erano già stati sovrascritti |
+| 8 | Hostname espliciti (`pgb-gw`, `pgb-ap`) | Con due case, due nodi `OpenWrt` sono ambigui |
+| 9 | **Upgrade OpenWrt 21.02.3 → 24.10** | Il più importante e il più rischioso: EOL, ed è il gateway esposto |
+
+**Scelte da fare consapevolmente, non urgenti:**
+- SQM/`cake` per il bufferbloat su FWA — **alternativo** all'offloading hardware
+- `s2sVPN -> lan`: oggi manca, quindi la casa principale non raggiunge i nostri
+  host. Incompatibile con l'integrazione delle due domotiche
+- `isolate='1'` su IoT e Guest — da provare, alcuni dispositivi usano scoperta fra pari
+- WPA3 (`sae-mixed`) sulle reti client, lasciando `psk2` su `PGB-IoT`
+- `hidden='0'` su `PGB-IoT`: nascondere l'SSID non protegge e crea instabilità
+
 ### 2. Secondo AP e stabilità WiFi
 L'utente riferisce WiFi instabile in tutta la casa. L'AP (`192.168.15.2`,
 SIM SIMAX1800T, OpenWrt 24.10) è raggiungibile ma va verificato il suo ruolo:
