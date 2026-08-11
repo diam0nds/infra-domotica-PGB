@@ -145,7 +145,7 @@ già corrette da non toccare.
 
 | # | Voce | Note |
 |---|---|---|
-| 1 | Regola `Allow HOME ASSISTANT from IoT VLAN` → cambiare `dest_ip` da `192.168.15.3` a `.4` | **Rompe la domotica adesso** e apre un accesso non voluto ad AdGuard |
+| ~~1~~ | ✅ **FATTO 2026-08-11** — `Allow HOME ASSISTANT from IoT VLAN`: `dest_ip` da `192.168.15.3` a `.4` | Verificato prima: nessun flusso IoT→AdGuard, quindi nessuna rottura. Dopo: 15 flussi IoT→HA attivi, 0 riferimenti a `.3` in iptables, DNS/filtro/tunnel intatti. Applicato con ripristino armato |
 | 2 | Rimuovere il port forward `HomeAssistant` (wan:443 → .3) | Inerte, e correggerlo esporrebbe HA su internet |
 | 3 | `IoTZone input=REJECT` + permessi espliciti per 53/67 | Oggi i 17 dispositivi IoT raggiungono SSH e LuCI del router |
 | 4 | `uhttpd redirect_https='1'` e ascolto solo su interfaccia di gestione | Password di amministrazione in chiaro su HTTP |
@@ -189,8 +189,16 @@ comandi vocali che passano dal loro cloud.
 | `.125` | non identificato, no lease statico | da censire |
 | `.139` | **S24-di-Luca** — telefono sulla VLAN IoT | da spostare su `PGB`/`PGB-G` |
 
-⚠️ Lo snapshot è un istante: **non basta per decidere cosa staccare.** I Shelly
-*sembrano* già locali, ma va confermato su un periodo lungo.
+⚠️ Lo snapshot è un istante: **non basta per decidere cosa staccare.**
+
+**Confermato subito dalla profilazione**: al primo campionamento successivo è
+emerso che `192.168.16.20` (CAMER-SHELLY25-Luci) parla con
+`34.38.167.174:6021` — Google Cloud, porta del **Shelly Cloud**. Lo snapshot
+iniziale l'aveva mancato e mi aveva portato a scrivere che i Shelly non
+uscivano su internet. **Almeno uno lo fa.**
+
+È la dimostrazione pratica del perché il punto 5 richiede il punto 1: senza
+profilazione avrei tagliato l'uscita ai Shelly convinto che fosse indolore.
 
 #### Lacuna che rende inefficace il filtro
 
@@ -202,7 +210,7 @@ completamente. Vale già oggi, non solo per le future smart TV.
 
 | # | Intervento | Rischio |
 |---|---|---|
-| 1 | **Profilazione traffico su 7 giorni** — campionamento leggero in RAM, aggregato per dispositivo: con chi parla, su che porte, con che frequenza | nullo |
+| ~~1~~ | ✅ **ATTIVO dal 2026-08-11** — profilazione ogni 15 min. `scripts/iot-profile-collect.sh` (cron sul PVE, `/etc/cron.d/iot-profile`), report con `scripts/iot-profile-report.sh`, dati in `/var/log/iot-profile.tsv`. **Da rimuovere il 18 agosto**, a finestra conclusa | nullo |
 | 2 | **Redirezione DNS obbligatoria** della VLAN IoT verso AdGuard (DNAT su 53), efficace anche sui DNS cablati | molto basso |
 | 3 | **Blocco DoT/DoH** (853 + resolver noti): senza, un dispositivo aggira il filtro cifrando le query | basso |
 | 4 | **Redirezione NTP locale**: molti dispositivi hanno l'NTP cablato e lo usano per raggiungere l'esterno | basso |
