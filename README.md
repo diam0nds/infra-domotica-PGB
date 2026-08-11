@@ -157,6 +157,44 @@ Cronologia dei crash e del tempo di inattività:
 | 2025-07-27 19:17 | 2025-08-04 03:30 | 8 giorni |
 | 2025-08-23 20:17 | 2025-09-06 14:33 | 14 giorni |
 | 2026-07-31 12:50 | 2026-08-08 08:58 | 8 giorni |
+| 2026-08-09 03:30 | 2026-08-11 10:07 | 2 giorni e 6 ore |
+
+### Il guasto del 9 agosto 2026 — la prova più chiara
+
+Questo episodio conferma la diagnosi in modo diretto, perché per la prima volta
+si è potuto confrontare il comportamento di **due dispositivi sulla stessa
+presa**:
+
+| | PVE | Router master |
+|---|---|---|
+| Ultimo log / spegnimento | 03:30:01, fine brusca | — |
+| Riavvio | **11 ago 10:07, a mano** | **9 ago ~04:00, da solo** |
+| Tempo fuori servizio | ~2 giorni e 6 ore | ~30 minuti |
+
+`systemd-fsck` all'avvio del PVE: *"Dirty bit is set. Fs was not properly
+unmounted"* — di nuovo uno stacco a caldo.
+
+L'interpretazione è lineare: **blackout intorno alle 03:30, corrente tornata
+verso le 04:00**. Il router è ripartito da solo appena è tornata la tensione, il
+PVE è rimasto giù finché qualcuno non ha premuto il pulsante due giorni dopo.
+È esattamente la differenza fra `Restore on AC Power Loss = Power On` e
+`Power Off`.
+
+Non è più una deduzione dai log di una sola macchina: è un confronto diretto fra
+due dispositivi che hanno subito lo stesso evento.
+
+**Il fix BIOS è l'intervento a più alto rendimento fra quelli in sospeso.**
+
+### Effetto collaterale positivo: il watchdog ha lavorato in produzione
+
+Il watchdog DNS era già installato dall'8 agosto (cron su flash in
+`/etc/crontabs/root`, richiamo in `rc.local`), quindi durante i due giorni di
+assenza del PVE il router ha continuato a risolvere via `1.1.1.1` con il
+filtraggio sospeso — che è il comportamento progettato.
+
+Non è dimostrabile dai log: il `logread` di OpenWrt è un buffer circolare in
+RAM e conserva solo dalle 07:22 dell'11 agosto. Ma il meccanismo era in
+posizione e il cron è persistente, quindi ha girato per tutto il periodo.
 
 **Causa**: BIOS `Restore on AC Power Loss` = `Power Off`.
 **Rimedio deciso**: l'utente lo cambierà da BIOS quando avrà una tastiera USB.
