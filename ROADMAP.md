@@ -85,6 +85,38 @@ Da verificare: inoltro porte sul router del provider, eventuale DDNS per questo
 sito, regole firewall in ingresso su `wg0`, e se ci sia un OpenVPN **sull'altro
 capo** (OPNsense o Synology) che l'utente sta confondendo con questo.
 
+### 1-bis. Spostare l'aggiornamento DuckDNS sul router
+**Richiesto dall'utente il 2026-08-11, da fare più avanti.**
+
+`diam0nds-pgb.duckdns.org` è l'hostname con cui la casa principale cerca questo
+sito. Non esiste alcun aggiornatore DDNS su router master, AP o PVE: secondo
+l'utente lo gestisce un **add-on di Home Assistant**, quindi gira nella VM 100.
+
+**Perché è un problema**: HAOS gira sul PVE, che dopo un blackout resta spento
+per giorni. Cronologia del 9 agosto:
+
+| Quando | Cosa |
+|---|---|
+| 9 ago 03:30 | Blackout: PVE e HAOS giù |
+| 9 ago ~04:00 | Il router riparte con un **IP pubblico nuovo** |
+| 9-11 ago | DuckDNS **non aggiornato**: punta all'IP vecchio |
+| 11 ago 10:07 | PVE e HAOS ripartono, il record si aggiorna |
+
+Quindi il servizio che pubblica l'indirizzo di questa casa dipende dalla
+macchina che muore. Dopo un blackout il sito diventa **irraggiungibile
+dall'esterno per tutta la durata del guasto**, e non si può rimediare da remoto
+perché per rimediare bisognerebbe entrare.
+
+**Rimedio**: `ddns-scripts` sul router master (supporta DuckDNS nativamente,
+pochi KB), che è sempre acceso e riparte da solo. L'add-on di Home Assistant
+può restare come ridondanza.
+
+Da fare insieme agli **inoltri di porta sul router del provider**
+(`192.168.51.1`): UDP 51820 per i client, UDP 51821 per la site-to-side. Sono
+lo stesso problema visto da due lati — oggi questa casa è raggiungibile
+dall'esterno solo se il PVE è accesso *e* se qualcuno ha configurato gli
+inoltri.
+
 ### 2. Secondo AP e stabilità WiFi
 L'utente riferisce WiFi instabile in tutta la casa. L'AP (`192.168.15.2`,
 SIM SIMAX1800T, OpenWrt 24.10) è raggiungibile ma va verificato il suo ruolo:
