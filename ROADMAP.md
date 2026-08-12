@@ -510,6 +510,32 @@ propria configurazione, separata da quella del server.
    Da fuori **senza** VPN continuerebbe a non funzionare, e questo è
    deliberato: vedi la decisione sull'esposizione in `decisions.md`.
 
+   **✅ FATTO il 2026-08-12.** Riscrittura applicata su dnsmasq del router
+   master. Verificato con validazione piena del certificato: **HTTP 200,
+   `ssl_verify_result 0`** — nessun avviso, perché il certificato del reverse
+   proxy è emesso per quel nome.
+
+   **L'eccezione anti-rebinding non è servita**: `rebind_protection` filtra le
+   risposte ricevute dagli upstream, mentre una voce `address=` è una risposta
+   locale autorevole. Una modifica in meno sul sottosistema più delicato.
+
+   ⚠️ **Effetto collaterale**: un client WireGuard che provi ad alzare il tunnel
+   **stando sulla WiFi di PGB** risolverebbe l'endpoint a un indirizzo interno e
+   fallirebbe. A casa la VPN non serve, ma sul telefono va configurata per non
+   salire sull'SSID di casa. I tunnel dell'infrastruttura non sono toccati: il
+   site-to-site punta al nome di **CASA**.
+
+### Installare `safe-change.sh` su PGB-GW
+
+Il dead-man's switch sta in `infra-common/scripts/router/` ma **non è mai stato
+deployato**: verificato il 2026-08-12, `safe-change status` non è richiamabile
+sul router. Per le modifiche a DNS basta un involucro sincrono auto-ripristinante,
+ma per quelle che **possono tagliare l'accesso** — rete, firewall, wireless — il
+timer in background è l'unica protezione se la sessione cade a metà.
+
+Va installato su **entrambi** i siti, ed è il primo pezzo da mettere su CASA
+prima di toccarne la configurazione.
+
 ⚠️ **Trappola da non ricalpestare**: la scorciatoia istintiva è un override DNS
 locale che faccia risolvere il nome DuckDNS a `192.168.15.4`.
 Su questo impianto **non funziona così com'è**: la protezione anti-rebinding

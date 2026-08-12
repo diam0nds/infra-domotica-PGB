@@ -486,3 +486,72 @@ dell'utente; se un giorno servisse, la cifratura si fa lato PGB prima della copi
 
 Sul NAS resta la copia del container AdGuard (335 MB), integra e verificata:
 **e' l'unica copia fuori sito esistente al momento**, quindi non la si cancella.
+
+## 2026-08-12 — Split DNS per Home Assistant: un solo URL, certificato valido
+
+**Sessione presidiata.** Obiettivo: replicare su PGB la configurazione che
+funziona su CASA — nell'app un solo URL, campo interno vuoto.
+
+**Fatto**: riscrittura locale in dnsmasq sul router master.
+
+```
+uci add_list dhcp.@dnsmasq[0].address='/<nome duckdns>/192.168.15.4'
+```
+
+Verificato con validazione piena del certificato: **HTTP 200,
+`ssl_verify_result 0`**. Nessun avviso nell'app o nel browser, perche' il
+certificato Let's Encrypt del reverse proxy e' emesso proprio per quel nome.
+
+### L'eccezione anti-rebinding NON era necessaria
+
+Avevo previsto di dover aggiungere `rebind_domain` per quel dominio, perche'
+`rebind_protection=1` scarta le risposte che mappano un nome pubblico su un
+indirizzo privato. **Misurato: non serve.** La protezione filtra le risposte
+ricevute **dagli upstream**; una voce `address=` e' una risposta locale
+autorevole e non passa da quel filtro.
+
+Una modifica in meno sul sistema piu' delicato dell'impianto. La regola: prima
+di aggiungere un'eccezione a una protezione, **provare se serve davvero**.
+
+### Perche' in dnsmasq e non in AdGuard
+
+- Tutti i client — LAN, IoT e ospiti — ricevono **il router** come DNS, quindi
+  una riscrittura sul router copre tutti senza toccare altro.
+- Non richiede di riavviare AdGuard, che e' il single point of failure del DNS.
+- Sopravvive al watchdog: se AdGuard muore e `dns-watchdog` sposta l'upstream su
+  `1.1.1.1`, la voce locale continua a rispondere.
+
+### ⚠️ Effetto collaterale da conoscere
+
+Il nome ora risolve a un indirizzo **privato** anche per i client sulla WiFi di
+casa. Un client WireGuard che provi ad alzare il tunnel **stando sulla rete di
+PGB** risolverebbe l'endpoint a `192.168.15.4:51820`, dove non c'e' WireGuard,
+e il tunnel fallirebbe.
+
+Non e' un problema in esercizio — a casa la VPN non serve — ma va saputo: sul
+telefono la VPN va configurata per **non** salire sull'SSID di casa.
+
+Verificato che i tunnel dell'infrastruttura **non** sono toccati: il
+site-to-site usa `endpoint_host` con il nome di **CASA**, non quello di PGB, e i
+peer road-warrior non hanno endpoint (si collegano loro).
+
+### Conseguenza sull'external_url, che annulla un mio consiglio precedente
+
+Avevo proposto di **svuotare** `external_url` perche' puntava a un indirizzo che
+non rispondeva da nessuna posizione. Ora quel nome **risponde**: dall'interno via
+split DNS e da fuori attraverso il tunnel. Quindi `external_url` e' corretto
+com'e' e va lasciato. `internal_url` resta `http://192.168.15.4:8123`
+deliberatamente: e' il percorso piu' robusto per i link generati da Home
+Assistant, indipendente dal DNS.
+
+### Gap trovato: `safe-change.sh` non e' installato sul router
+
+Lo script del dead-man's switch sta in `infra-common/scripts/router/` ma **non
+e' mai stato deployato** su PGB-GW: `safe-change status` non e' richiamabile.
+Per questa modifica e' stato usato un involucro auto-ripristinante sincrono
+(backup, applica, ricarica, verifica tre cose, ripristina se una fallisce), che
+per una modifica al DNS e' anche piu' adatto — non si rischia di perdere la
+sessione, e il guasto temuto e' il DNS di casa, verificabile subito.
+
+Resta da installarlo per le modifiche che **possono** tagliare l'accesso
+(rete, firewall, wireless). Aggiunto in ROADMAP.
