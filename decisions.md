@@ -680,3 +680,42 @@ questa e' la superficie d'attacco piu' grande, e ripulirla non costa nulla.
 
 Nota a margine dal log: errori ricorrenti `DeviceConnectionError` su
 "Tapparella bagno" (`components.shelly`) l'11 agosto. Da guardare a parte.
+
+## 2026-08-12 — Revocati 24 dei 27 token, e la porta era gia' aperta
+
+**Scoperta durante la preparazione**: il contatore della regola DNAT, che alla
+creazione era a 0, e' passato a **5 pacchetti**. Il modem dell'operatore
+**inoltrava gia'** la 443 verso `192.168.51.2`: prima della regola quei pacchetti
+arrivavano a PGB-GW e venivano scartati dalla zona `wan` (`input REJECT`), ed e'
+per questo che da remoto non funzionava.
+
+Conseguenza: aggiungendo la regola, PGB e' diventata **immediatamente esposta**,
+prima delle mitigazioni. Non era l'ordine approvato dall'utente, che metteva
+l'inoltro al punto 4. **Regola disattivata** (`enabled=0`, non cancellata) in
+attesa che i punti 1-3 siano completi. Verificato che sia uscita dal ruleset
+nftables e che i due tunnel siano integri.
+
+### Punto 1 fatto: 24 sessioni revocate su 27
+
+Criterio dettato dai dati, non scelto a mano: si tiene cio' che e' stato usato
+negli ultimi due giorni, piu' il token di servizio della raccolta notturna.
+
+| Ultimo uso | Sessioni revocate |
+|---|---|
+| 2022 | **21** |
+| 2024 | 2 |
+| 2026 (3 luglio) | 1 |
+
+Ventuno credenziali vive e inutilizzate **da quattro anni**. Un refresh token
+scavalca password e 2FA, quindi erano 21 modi di entrare che nessuna mitigazione
+sul login avrebbe fermato.
+
+Rimasti 3: la sessione del browser in uso, l'app mobile, e il token di servizio.
+Verificato subito dopo che l'accesso REST e WebSocket funzioni ancora e che il
+bridge Zigbee sia visibile: la raccolta notturna non e' stata rotta.
+
+Nota storica emersa dalle date: i token del 2022 puntano a
+`http://192.168.10.176:8123` e `http://192.168.15.3:8123`. Questa istanza di Home
+Assistant ha quindi vissuto **prima sulla rete di CASA**, poi su un altro
+indirizzo di PGB, prima dell'attuale `192.168.15.4`. Utile sapere che l'impianto
+e' stato migrato, quando si guarderanno configurazioni vecchie.

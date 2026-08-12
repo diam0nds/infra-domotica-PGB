@@ -13,7 +13,8 @@ restano qui con la data, così si vede cosa è già stato fatto e quando.
 >
 > | Data | Modalità | Lavoro svolto |
 > |---|---|---|
-> | 2026-08-12 | **presidiata** | correzioni a questa roadmap dopo l'assessment di CASA; nessuna modifica agli apparati |
+> | 2026-08-12 | **presidiata** | correzioni a questa roadmap dopo l'assessment di CASA; nessuna modifica agli apparati di rete |
+> | 2026-08-12 (ricon­fermata alle 10:10) | **presidiata** | replica esterna dei backup resa meccanismo: `fstab`, storage PVE, hook `vzdump`, ripristino provato. Solo lato PVE, nessuna modifica ai router |
 
 ---
 
@@ -187,7 +188,7 @@ già corrette da non toccare.
 | 6 | `flow_offloading='1'` (software) | Guadagno maggiore di prestazioni su mt7621 |
 | 7 | Log persistenti (`log_size` + collettore) | I log del blackout del 9 ago erano già stati sovrascritti |
 | 8 | Hostname espliciti (`pgb-gw`, `pgb-ap`) | Con due case, due nodi `OpenWrt` sono ambigui |
-| 9 | **Upgrade OpenWrt 21.02.3 → 24.10** | Il più importante e il più rischioso: EOL, ed è il gateway esposto |
+| ~~9~~ | ✅ **FATTO l'11 ago 2026** — upgrade a **OpenWrt 24.10.8** | Verificato il 2026-08-12: `DISTRIB_RELEASE=24.10.8`, e `swconfig` **non è più installato** (il nodo è passato a **DSA**). Nomi di interfaccia e firewall sono cambiati: vedi la memoria `pgb-gw-openwrt-2410.md` |
 
 **Scelte da fare consapevolmente, non urgenti:**
 - SQM/`cake` per il bufferbloat su FWA — **alternativo** all'offloading hardware
@@ -294,14 +295,27 @@ Fatto anche: BSSID fissati con `macaddr`, `802.11k` su tutte le `PGB`.
 La rete IoT **non esiste sul cavo**: `192.168.16.1` vive direttamente
 sull'interfaccia WiFi del master, senza bridge né VLAN. L'AP ha solo `lan`.
 
-Serve: VLAN sullo switch del master (`swconfig`, 21.02), aggancio della rete IoT,
-VLAN corrispondente sull'AP (**DSA**, 24.10 — paradigma diverso), interfaccia IoT
-sull'AP, BSS `PGB-IoT` con chiave copiata senza leggerla.
+⚠️ **Correzione 2026-08-12.** Qui c'era scritto «VLAN sullo switch del master
+(`swconfig`, 21.02)» e «due dispositivi con **paradigmi diversi**». **Non è più
+vero dall'upgrade dell'11 agosto.** Misurato il 12/08 sul master: `24.10.8`,
+`swconfig` **assente**, `br-lan` con `lan1 lan2 phy1-ap0`. Il master è su **DSA**
+come l'AP (`24.10.0`).
 
-Cinque modifiche coordinate su due dispositivi con paradigmi diversi, sulla rete
-che porta 17 dispositivi di domotica, su un sito non presidiato. **Prerequisito**
-per ridurre la potenza a 2.4 GHz: oggi `corr-shelly25-faretti` è a −78 dBm e non
-ha alternative.
+**Conseguenza sul piano: questo progetto è diventato più semplice, non più
+difficile.** Un solo paradigma su entrambi i nodi (`bridge-vlan` DSA), quindi la
+configurazione è la stessa da un lato e dall'altro. Chi avesse seguito la
+versione precedente avrebbe cercato `swconfig` su un nodo che non lo ha, e
+avrebbe attribuito il fallimento al bersaglio sbagliato — §12-bis.
+
+Serve: `bridge-vlan` sul master, aggancio della rete IoT, VLAN corrispondente
+sull'AP, interfaccia IoT sull'AP, BSS `PGB-IoT` con chiave copiata senza
+leggerla.
+
+Cinque modifiche coordinate su due nodi, sulla rete che porta 17 dispositivi di
+domotica. **Da fare in finestra presidiata** — non per il paradigma, che ora è
+uniforme, ma perché un errore di VLAN sul bridge taglia l'accesso al master.
+**Prerequisito** per ridurre la potenza a 2.4 GHz: oggi
+`corr-shelly25-faretti` è a −78 dBm e non ha alternative.
 
 ### ~~2-ter~~. Secondo AP e stabilità WiFi
 L'utente riferisce WiFi instabile in tutta la casa. L'AP (`192.168.15.2`,
@@ -363,6 +377,13 @@ insieme: un NAS o un disco USB migliorerebbe anche le prestazioni.
 la macchina è spenta alle 02:30 quel backup salta — stesso difetto già visto sul
 backup delle configurazioni, là risolto con un `@reboot`. Qui non c'è un
 equivalente nativo.
+
+✅ **Prima esecuzione autonoma confermata il 2026-08-12.** Fino all'11 agosto il
+job era stato provato solo **a mano**: "configurato" non è "funzionante". Il run
+delle 02:30 del 12/08 è scattato da sé e ha prodotto il secondo set —
+`vzdump-qemu-100-2026_08_12-02_30_12` (1,452 GB) e
+`vzdump-lxc-101-2026_08_12-02_35_16` (336 MB), task `vzdump::root@pam` chiuso
+`OK`. Ora sul disco ci sono **due set**, non uno.
 
 ### 4-bis. ✅ Backup della configurazione dei dispositivi Shelly — FATTO 2026-08-12
 **Richiesto dall'utente il 2026-08-11, completato il 2026-08-12** (sessione
@@ -525,6 +546,43 @@ propria configurazione, separata da quella del server.
    salire sull'SSID di casa. I tunnel dell'infrastruttura non sono toccati: il
    site-to-site punta al nome di **CASA**.
 
+### Stabilità degli Shelly — segnalato dall'utente il 2026-08-12
+
+**L'utente riferisce che gli Shelly non sono molto stabili, e che lo Shelly EM in
+particolare è difettoso e perde spesso la connessione.**
+
+Riscontri già in mano, da non ripartire da zero:
+
+| Riscontro | Dettaglio |
+|---|---|
+| `CORR-SHELLY-EM` `192.168.16.17` | **non risponde affatto**: escluso dalla raccolta del 2026-08-12, era già giù prima |
+| "Tapparella bagno" | `DeviceConnectionError` ricorrenti nel log di HA l'11 agosto (tre in 16 minuti) |
+| Segnale WiFi rilevato | `bagno-shelly25-tapparella` −58 dBm, `corr-shelly25-faretti` −52 dBm, `matr-shelly1pm-strip` −55 dBm |
+| Contesto di rete | la rete `PGB-IoT` vive **direttamente sulla radio 2.4 GHz del router master**, canale 1 |
+
+**Da dove partire**, in ordine di costo:
+
+1. **Correlare gli errori con il segnale.** Il log di HA dice *quali* Shelly
+   sbagliano e quando; `wifi-clients.sh` dà il segnale di ciascuno. Se gli errori
+   si concentrano sui dispositivi più deboli, è un problema di copertura e la
+   risposta è il progetto VLAN — portare la rete IoT sul cavo verso PGB-AP,
+   già in elenco.
+2. **Confrontare le versioni firmware.** I JSON già raccolti in
+   `guests/shelly/` contengono la versione di ciascuno: se i difettosi sono su
+   una versione vecchia, è la prima cosa da provare. ⚠️ Aggiornare un firmware
+   richiede **sessione presidiata**: uno Shelly che non riparte è dietro un muro.
+3. **Distinguere il caso EM dagli altri.** Un dispositivo che non risponde mai
+   non è "instabile", è guasto o spento. Prima di indagini di rete, verificare
+   che sia alimentato — è un dato che serve una persona sul posto.
+4. **Usare il profilatore IoT già attivo** (`/var/log/iot-profile.tsv`, ogni 15
+   minuti): incrocia gli orari delle sparizioni con il resto del traffico. Se
+   cadono tutti insieme a orari fissi, non è il singolo dispositivo.
+
+⚠️ **Non concludere dalla sola assenza nella raccolta.** `collect-shelly.sh`
+salta i dispositivi che non rispondono e lo scrive; il confronto col numero della
+raccolta precedente si legge da git e segnala i cali. Ma un dispositivo assente
+può essere spento, non guasto: la distinzione richiede una verifica sul posto.
+
 ### Installare `safe-change.sh` su PGB-GW
 
 Il dead-man's switch sta in `infra-common/scripts/router/` ma **non è mai stato
@@ -616,8 +674,8 @@ cloud del produttore, va contro l'obiettivo di minimizzazione dei dati.
 | PVE -> Synology attraverso il tunnel | ✅ 16,5 ms |
 | Il Synology ci vede come | **192.168.15.5** (nessun masquerade sul tunnel, provato in conntrack) |
 | NFS sul Synology | ✅ attivo, due esportazioni esistenti |
-| Banda in salita di PGB | **16,8 Mbps / 2,0 MB/s** |
-| Tempo stimato per 1,7 GB | **~15 minuti** |
+| Banda in salita di PGB | stima 11/08: 16,8 Mbps / 2,0 MB/s → **misurata 12/08: 17,66 Mbps / 2,21 MB/s** |
+| Tempo stimato per 1,7 GB | stima ~15 min → **misurato: 14,5 min per set** |
 | Cifratura in transito | garantita dal tunnel WireGuard |
 
 ✅ **Ostacolo rimosso — configurazione DSM fatta, verificata il 2026-08-12.**
@@ -640,17 +698,141 @@ sottocartella.** Creare `File/backup-pgb` non produce alcuna esportazione: il
 montaggio resta rifiutato, verificato su entrambi i percorsi. Resta scritto
 perché è la trappola che ha fatto perdere il primo tentativo.
 
-**Prossimo passo, in attesa di ok** (nessuna modifica agli apparati di rete,
-tutto lato PVE):
+1. ✅ **FATTO 2026-08-12** (sessione **presidiata**) — montato con **NFSv3**, il
+   Synology rifiuta `vers=4.1`
+2. ✅ **FATTO 2026-08-12** — trasferimento reale misurato **due volte**: il primo
+   tentativo è fallito e ha insegnato le opzioni giuste. Numeri e trappole qui
+   sotto
+3. ✅ **FATTO 2026-08-12** — copia `rsync` **dopo** il job, come **hook nativo di
+   `vzdump`** (fase `job-end`): `infra-common/scripts/pve-replica-remota.sh`,
+   registrato in `/etc/vzdump.conf`. Non un cron a sé, che non saprebbe se il
+   backup è andato bene e sarebbe un secondo meccanismo da ricordare
+4. ✅ **FATTO 2026-08-12** — storage PVE `backup-casa` registrato. Vedi sotto
+   perché è di tipo `dir` con `is_mountpoint` e **non** di tipo `nfs`
+5. ✅ **FATTO 2026-08-12** — ripristino dalla copia remota **provato**, non
+   dichiarato. Dettagli sotto
 
-1. Montare con **NFSv3** — il Synology rifiuta `vers=4.1`, già misurato
-2. Misurare un trasferimento **reale**, non stimato: la stima è ~15 min per
-   1,7 GB a 2,0 MB/s, ma va vista
-3. Aggiungere la copia `rsync` **dopo** il job `pgb-daily`, non un job PVE
-   puntato sullo storage remoto (motivo qui sopra: snapshot aperto 15 min)
-4. Registrare lo storage in PVE per poter ripristinare dall'interfaccia
-5. **Provare un ripristino dalla copia remota**, come già fatto per quella
-   locale — §4 del MODUS-OPERANDI: un backup non ripristinato non è un backup
+#### Com'è fatto il meccanismo — 2026-08-12, sessione presidiata
+
+```
+02:30  vzdump pgb-daily          -> /var/lib/vz/dump   (eMMC, ritenzione 5/3)
+       └─ hook job-end
+          pve-replica-remota.sh  -> /mnt/backup-casa/dump  (NAS CASA, 7/4/3)
+04:30  collect-configs.sh        -> repo cifrato su GitHub
+          include hosts/pve/state/replica-casa.txt = data ultima replica
+```
+
+**Storage di tipo `dir` con `is_mountpoint 1`, non di tipo `nfs`.** Motivo: con lo
+storage `nfs` è PVE a gestire il mount, e su un NFS raggiungibile solo via VPN un
+tunnel giù può appendere `pvestatd` e con lui l'interfaccia. Con `dir` +
+`is_mountpoint` il mount lo fa `fstab` e PVE **rifiuta di attivare** lo storage
+quando il mount non c'è, invece di scrivere nella directory vuota sotto il
+mountpoint. Provato smontando: `unable to activate storage 'backup-casa' -
+directory is expected to be a mount point but is not mounted`, stato `inactive`,
+nessun file elencato. È il fail-safe del §5 applicato allo storage.
+
+**Ritenzione remota più lunga della locale (7/4/3 contro 5/3) e `rsync` senza
+`--delete`**, deliberatamente. Così la copia fuori casa conserva più storia della
+locale e una cancellazione locale accidentale **non si propaga**. La potatura la
+fa `pvesm prune-backups`, cioè lo strumento nativo, dentro l'hook.
+
+**Timeout nell'hook (1 h) come parte del progetto, non come precauzione**: il
+mount è `hard`, quindi un NAS che sparisce appenderebbe il processo per sempre.
+
+#### La visibilità dei guasti non passa dalla posta — verificato
+
+⚠️ **Le notifiche di PVE su questo nodo non arrivano.** Misurato il 2026-08-12:
+PVE scrive `notified via target mail-to-root` e postfix rimbalza un secondo dopo
+— `550-5.7.25` nessun PTR sull'IP residenziale, `550-5.7.26` nessun SPF/DKIM,
+`relayhost` vuoto. **Tutte** le notifiche di backup dell'11 e 12 agosto sono
+rimbalzate. Era il difetto di CASA travestito: là uno script custom taceva, qui
+il meccanismo nativo *dichiara* di aver notificato.
+
+Quindi la replica rende visibili i propri guasti in **tre modi indipendenti**,
+tutti "a strappo", nessuno dipendente dalla posta:
+
+| Canale | Dove si guarda | Sopravvive a PVE spento |
+|---|---|---|
+| journal | `journalctl -t vzdump-replica` | no |
+| marker `REPLICA-CASA-FALLITA.txt` in `/root/infra` | una sessione lo vede appena guarda | no |
+| `hosts/pve/state/replica-casa.txt` nel repo su GitHub | data dell'ultima replica riuscita | **sì** |
+
+Il terzo è quello che conta: se quella data smette di avanzare, la replica è
+ferma da allora, e lo si vede **da fuori casa**. È il motivo per cui quel file è
+un'eccezione deliberata alla regola "solo informazioni stabili" di
+`collect-configs.sh`: cambia ogni giorno, e il fatto che cambi *è* il segnale.
+
+L'hook esce anche con codice **diverso da zero** quando la replica falla, così il
+job risulta FALLITO nel log delle attività di PVE — cioè nello stesso posto dove
+si guarda il backup.
+
+**Entrambi i percorsi provati il 2026-08-12**, non solo quello felice:
+
+| Prova | Esito |
+|---|---|
+| `job-end` con tutto a posto | 0 file trasferiti, 0 byte — incrementale confermato |
+| `job-end` con mount assente (tunnel giù simulato) | uscita **1**, marker scritto, riga `daemon.err` nel journal |
+| Ripristino dopo il guasto | marker **cancellato da solo** alla prima replica riuscita |
+| Fasi non pertinenti (`job-init`, `backup-end`, …) | no-op, uscita 0 |
+
+#### Ripristino provato dalla copia remota — 2026-08-12
+
+Stesso protocollo dell'11 agosto per la copia locale. Ripristinato il **CT 101
+dal NAS di CASA** (l'archivio prodotto dal job notturno, non uno fatto a mano) su
+VMID **999**, in **75 s**. Container `stopped`, **mai avviato** — ha lo stesso MAC
+dell'originale. Rootfs montato in **sola lettura** e verificato: presente
+`/opt/AdGuardHome/AdGuardHome.yaml` con `blocking_mode: nxdomain`, cioè la
+modifica dell'11 agosto. Poi smontato, `pct destroy 999`, **zero volumi residui**
+e i quattro archivi remoti intatti.
+
+I 75 s corrispondono a ~4,5 MB/s effettivi, coerenti con i 4,67 MB/s misurati in
+discesa: due misure indipendenti che concordano.
+
+#### Misure reali del trasferimento — 2026-08-12
+
+| Misura | Valore |
+|---|---|
+| Dati trasferiti (2 set completi, 11 file) | **3,58 GB** |
+| Durata in salita | **1730 s = 28,8 min** |
+| **Rate vero in salita** (contatori `wg`) | **2,21 MB/s — 17,66 Mbps** |
+| Rate del solo payload (rsync) | 2,07 MB/s → overhead WireGuard+NFS ~6,5% |
+| **Rate in discesa** (mai misurato prima) | **4,67 MB/s — 37,33 Mbps** |
+| Integrità: `rsync -rtc --dry-run` su 3,58 GB | ✅ **zero differenze di checksum** |
+| Timeout NFS durante i 29 min | **nessuno** |
+
+Proiezioni che ne derivano: **un set incrementale ≈ 14,5 min**; ritenzione piena
+(8 set, ~14 GB) ≈ **1h50** di prima sincronizzazione; un ripristino scarica a
+2,1× la velocità con cui carica.
+
+Le due misure di salita **concordano** (payload vs payload+incapsulamento), ed è
+questo che rende il numero credibile. Nel tentativo fallito divergevano di due
+ordini di grandezza, e la divergenza era il sintomo.
+
+#### Tre trappole trovate rompendo, da mettere in qualunque procedura futura
+
+1. **`hard`, mai `soft`.** Primo tentativo con `soft,timeo=100,retrans=3`: morto
+   dopo 44 s con `close failed ... Input/output error (5)`, rsync code 11, e
+   `dmesg` con **1902 callback RPC soppressi**. Su un link da 2,2 MB/s il flush
+   di 335 MB di pagine sporche alla `close()` supera il timeout, e `soft`
+   trasforma la lentezza in **perdita di dati**. Con `hard,timeo=600,retrans=5`:
+   29 minuti, zero errori. Su un sito non presidiato è la differenza fra un
+   backup in ritardo e un backup **mancante**.
+   ⚠️ Rovescio da gestire: con `hard`, se il NAS spariesce il processo resta
+   appeso. Il job dovrà avere un timeout proprio, e `nofail` quando andrà in
+   `fstab`.
+2. **`-rt`, mai `-a`.** Il Synology **squasha root a uid 1024** (modo 777):
+   `rsync -a` tenterebbe la `chown` e fallirebbe su ogni file.
+3. **Il rate riportato da rsync su NFS è fittizio.** Nel primo tentativo diceva
+   **146 MB/s** su un link da 2,2: scriveva nella **page cache**, che risponde a
+   velocità di RAM, e il flusso vero parte alla `close()`. Il numero attendibile
+   sta nei contatori di `wg show ... transfer`, non in rsync.
+
+⚠️ Una copia del CT 101 era già stata messa sul NAS alle 00:48 del 12/08 da una
+sessione precedente, **senza preservare la `mtime`**: `rsync -t` non la
+riconosceva come identica e la ritrasmetteva. Chi copia a mano su quella
+destinazione usi `rsync`, non `cp`. In `dmesg` c'è anche un timeout NFS alle
+**00:37:59** dello stesso giorno: quel tentativo aveva già incontrato il
+problema di `soft` senza che venisse registrato.
 
 ⚠️ Il difetto da non replicare: su CASA uno script custom di backup ha fallito
 **in silenzio per undici mesi**. Qualunque cosa si aggiunga qui deve segnalare
