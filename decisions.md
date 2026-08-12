@@ -555,3 +555,69 @@ sessione, e il guasto temuto e' il DNS di casa, verificabile subito.
 
 Resta da installarlo per le modifiche che **possono** tagliare l'accesso
 (rete, firewall, wireless). Aggiunto in ROADMAP.
+
+## 2026-08-12 — Esporre Home Assistant di PGB su internet: scelta dell'utente
+
+**Sessione presidiata. Decisione dell'utente**, presa dopo che l'obiezione era
+stata messa sul tavolo e discussa. Registrata qui con il contesto perche' fra sei
+mesi si sappia **cosa era noto al momento della scelta**.
+
+### Le alternative offerte
+
+1. **VPN automatica** — WireGuard che sale da se' fuori casa. Zero esposizione,
+   nessuna modifica a router o modem, solo configurazione del telefono.
+2. **Cloudflare Tunnel** — funziona senza VPN e senza aprire porte (e' il server
+   che esce), aggira il doppio NAT, si puo' mettere autenticazione davanti.
+   Dipende da un servizio esterno e da un add-on in piu'.
+3. **Port forward** — scelta dell'utente. Identico a CASA.
+
+### Cosa comporta, detto prima di farlo
+
+Home Assistant diventa raggiungibile da internet 24 ore su 24. HA comanda **cose
+fisiche**: serrature, riscaldamento, tapparelle. Una compromissione non e' una
+fuga di dati, e' un problema di sicurezza fisica dell'abitazione.
+
+Il fattore aggravante specifico di PGB: **e' una seconda casa, di norma non
+presidiata per settimane.** Quando esce una vulnerabilita' di Home Assistant o
+del reverse proxy, qui nessuno aggiorna in giornata. Per confronto, WireGuard
+non risponde affatto a chi non ha la chiave: uno scanner vede una porta muta.
+
+**L'utente ha scelto consapevolmente il port forward.** Non e' una svista, e non
+va "corretto" da una sessione futura senza riparlarne con lui.
+
+### Fatto
+
+Su PGB-GW, regola DNAT `HA-HTTPS-da-internet`: `wan` TCP 443 ->
+`192.168.15.4:443`. Applicata con backup e verifica automatica.
+
+Verificato **specificamente** che i due tunnel WireGuard siano sopravvissuti,
+perche' e' il punto in cui si e' gia' sbagliato: la regola DNAT `WG-s2S` aveva
+rotto il site-to-site l'8 agosto. Entrambi con handshake recente e contatori di
+traffico in crescita dopo la modifica.
+
+`fw4` genera da se' le regole di **reflection** per `192.168.9.0/24` e
+`192.168.15.0/24`: non servono, perche' dall'interno risolve lo split DNS, ma non
+danno fastidio.
+
+Contatore della regola: **0 pacchetti**. La regola e' inerte finche' non si
+inoltra anche sul modem: quel passo richiede le credenziali del modem
+dell'operatore e lo fa l'utente.
+
+### Mitigazioni non opzionali
+
+Con la porta aperta, queste tre cose non sono consigli ma requisiti:
+
+1. **2FA (TOTP) su tutti gli account** di Home Assistant, non solo il principale.
+2. **`ip_ban_enabled: true`** e `login_attempts_threshold` basso in
+   `configuration.yaml`. Senza, la pagina di login accetta tentativi illimitati.
+3. **Aggiornamenti regolari** di Home Assistant e dell'add-on del proxy. Su un
+   sito non presidiato questo e' il punto piu' debole della catena.
+
+Da verificare che siano attive: non sono ispezionabili via API.
+
+### Nota pratica sul modem
+
+Molti modem degli operatori usano la 443 per la **propria** amministrazione
+remota e non la lasciano inoltrare. Se accade, si inoltra una porta esterna alta
+(es. 8443) verso `192.168.51.2:443` e l'URL nell'app diventa `https://<nome>:8443`
+— che e' con ogni probabilita' il motivo per cui **CASA usa proprio la 8443**.
