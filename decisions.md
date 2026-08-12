@@ -621,3 +621,62 @@ Molti modem degli operatori usano la 443 per la **propria** amministrazione
 remota e non la lasciano inoltrare. Se accade, si inoltra una porta esterna alta
 (es. 8443) verso `192.168.51.2:443` e l'URL nell'app diventa `https://<nome>:8443`
 — che e' con ogni probabilita' il motivo per cui **CASA usa proprio la 8443**.
+
+## 2026-08-12 — Prima di aprire la porta: 27 token di accesso attivi
+
+Emerso perche' l'utente ha ricordato che il reverse proxy e' l'add-on NGINX
+dentro Home Assistant. Quel dettaglio ha due conseguenze, entrambe rilevanti
+adesso che la 443 sta per essere esposta.
+
+### 1. Con un proxy davanti, `ip_ban` puo' chiudere fuori tutti
+
+Home Assistant vede come indirizzo del client quello del **proxy**, non quello
+vero, a meno che nel `configuration.yaml` ci sia:
+
+```yaml
+http:
+  use_x_forwarded_for: true
+  trusted_proxies:
+    - 172.30.33.0/24     # rete interna degli add-on
+```
+
+Se manca e si attiva `ip_ban_enabled` con una soglia, ogni tentativo falliti da
+internet appare provenire dal proxy: dopo N tentativi Home Assistant **banna il
+proxy**, e nessuno entra piu' da quella strada. Su un sito non presidiato e'
+un'autoesclusione. Si recupererebbe da `http://192.168.15.4:8123` in VPN,
+modificando `ip_bans.yaml`.
+
+**Evidenza raccolta, forte ma non conclusiva**: in 4301 righe di log e nei 27
+token attivi **non compare nessun indirizzo `172.30.x`**, e non c'e' alcun avviso
+"untrusted proxy" nonostante il traffico attraverso il proxy sia certamente
+avvenuto. Indica che la configurazione c'e'. Non e' una prova: HA non registra
+`last_used_ip` per i token a lunga durata, quindi il test diretto non conclude.
+**Verificare leggendo `configuration.yaml` prima di attivare `ip_ban`.**
+
+### 2. 27 refresh token attivi, e un solo account umano
+
+| Account | Ruolo |
+|---|---|
+| `Luca` | **admin, umano** — l'unico non di sistema |
+| `Supervisor` | di sistema, admin |
+| `Home Assistant Content` | di sistema, sola lettura |
+| `mqtt user` | non admin, gruppo `system-users` — privilegio minimo, corretto |
+
+I 27 token si distribuiscono su **10 indirizzi client diversi**, fra cui 8 da
+`192.168.49.169` (intervallo Wi-Fi Direct / hotspot Android), 3 da
+`192.168.10.115` (**rete di CASA**) e uno mai usato.
+
+**Un refresh token scavalca password e 2FA.** Attivare la 2FA lasciando vivi 26
+token vecchi non protegge da chi ne possiede uno: vecchi telefoni, browser su
+macchine dismesse, dispositivi passati ad altri. Con la porta aperta su internet
+questa e' la superficie d'attacco piu' grande, e ripulirla non costa nulla.
+
+**Ordine corretto delle operazioni**, che non e' indifferente:
+
+1. **Revocare i token** non riconosciuti (profilo di Home Assistant)
+2. **Attivare la 2FA** su `Luca` — dopo il punto 1, altrimenti e' aggirabile
+3. **Verificare `trusted_proxies`**, poi attivare `ip_ban`
+4. **Solo allora** l'inoltro sul modem
+
+Nota a margine dal log: errori ricorrenti `DeviceConnectionError` su
+"Tapparella bagno" (`components.shelly`) l'11 agosto. Da guardare a parte.
