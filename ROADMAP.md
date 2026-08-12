@@ -476,9 +476,39 @@ Verificato anche che la strada sia libera da entrambe le reti WiFi di casa:
 companion → il server → indicare **URL connessione interna**
 `http://192.168.15.4:8123` e **SSID rete domestica** `PGB`. L'app tiene la
 propria configurazione, separata da quella del server.
-2. Verificare **come si raggiunge davvero HA da fuori**: se l'accesso remoto
-   passa dal tunnel WireGuard e non da un port forward, `external_url` dovrebbe
-   puntare all'indirizzo raggiungibile nel tunnel, non a DuckDNS.
+2. **CORREZIONE del 2026-08-12**: avevo scritto che su PGB non esiste reverse
+   proxy e che HA parla solo HTTP in chiaro. **Falso.** Il proxy c'è, dentro
+   Home Assistant come add-on, e funziona:
+
+   ```
+   443 su 192.168.15.4     aperta, con SNI stretto
+   certificato             CN = il nome DuckDNS del sito, Let's Encrypt
+   emesso                  8 ago 2026, scade 6 nov 2026 (rinnovo automatico OK)
+   con il nome corretto    HTTP 200
+   ```
+
+   L'errore veniva dalla mia sonda: avevo provato `https://192.168.15.4`, e un
+   proxy con SNI stretto **rifiuta le richieste per indirizzo IP**
+   (`tlsv1 unrecognized name`). Ho letto il mio strumento sbagliato come
+   assenza del servizio. Nono caso della serie.
+
+   Quindi a PGB, rispetto a CASA, mancano **solo due cose**: il port forward
+   della 443 (sul modem e su PGB-GW) e il ritorno del nome dall'interno.
+
+   **Strada consigliata — funziona da dentro e in VPN, senza esporre niente:**
+
+   - riscrittura DNS in AdGuard: il nome DuckDNS → `192.168.15.4`
+   - eccezione anti-rebinding in dnsmasq per **quel solo** dominio
+     (`rebind_domain`), altrimenti la risposta viene scartata
+
+   Risultato: **un solo URL** — il nome DuckDNS in HTTPS — con certificato
+   valido, che funziona sul WiFi di casa e da fuori attraverso il tunnel —
+   perché `wg0` è nella zona `lan` e la risoluzione passa dallo stesso AdGuard.
+   Più pulito di `http://192.168.15.4:8123`, e identico a come è configurata
+   CASA lato app (URL interno vuoto).
+
+   Da fuori **senza** VPN continuerebbe a non funzionare, e questo è
+   deliberato: vedi la decisione sull'esposizione in `decisions.md`.
 
 ⚠️ **Trappola da non ricalpestare**: la scorciatoia istintiva è un override DNS
 locale che faccia risolvere il nome DuckDNS a `192.168.15.4`.
