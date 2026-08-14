@@ -443,6 +443,74 @@ liberi con interfaccia locale completa.
 | `SONOFF-Zbridge-PRO` `192.168.16.10` | **Tasmota 14.2.0.3** su ESP32-D0WD-V3, template `TCP ZBBridge Pro` <!-- no-secrets-ok: 14.2.0.3 e' la versione di Tasmota, non un indirizzo IP --> | scaricare la configurazione da `/dl` (endpoint di download, sola lettura) |
 | `BHT-6000-Termost` `192.168.16.23` | **WThermostat v1.23.beta1-fas** (ESP8266) | interfaccia su `/config`; nessun endpoint di dump: la configurazione va letta dalle pagine |
 
+### ✅ 4-quater. Backup di bridge e termostato — FATTO 2026-08-14
+
+Erano gli **ultimi due dispositivi** con interfaccia locale senza alcuna copia
+della configurazione. Ora nel backup cifrato giornaliero, via
+`infra-common/scripts/collect-iot-firmware.sh` richiamato da `collect-configs.sh`.
+
+**Il pezzo che vale davvero non è quello che sembrava.** Sul bridge non sono gli
+accoppiamenti Zigbee — quelli stanno in `guests/zigbee` — ma **una regola**:
+
+```
+Rule1: on system#boot do TCPStart 8888 endon        State: ON
+```
+
+Senza quella regola, dopo ogni ritorno di corrente la 8888 non si apre,
+Zigbee2MQTT non trova il coordinatore e **la rete Zigbee resta giù** finché
+qualcuno non se ne accorge. Il 14 agosto il bridge è ripartito con
+`RestartReason: "Vbat power on reset"` e la regola ha fatto il suo lavoro. Se un
+reset la cancella, questo backup è ciò che evita di ricostruirla a memoria.
+
+⚠️ **Correzione a una supposizione del 2026-08-14**: avevo scritto che `TCPStart`
+non è persistente e che il bridge aveva perso la configurazione. **Entrambe
+false.** La regola c'è ed è attiva; e `Module 0` significa "usa il Template", che
+è `TCP ZBBridge Pro` — il default del build `zbbrdgpro`, non una config persa. A
+valori di fabbrica sono solo nome, topic e MQTT del bridge, che a Z2M non
+servono.
+
+**Cosa viene raccolto**, e perché due forme e non una:
+
+| File | A cosa serve |
+|---|---|
+| `zbbridge-pro.dmp` | dump binario da `/dl`, 4096 byte |
+| `zbbridge-pro-leggibile.txt` | `Status 0`, `Module`, `Template`, `Rule1-3` |
+| `bht6000-config.html` | pagina di configurazione del termostato |
+
+Il `.dmp` è legato alla **versione del firmware**: Tasmota può rifiutare un dump
+prodotto da una versione diversa. In quel caso la forma leggibile è ciò che
+permette di riconfigurare a mano, e `Template` più `Rule1` sono tutto il
+necessario.
+
+**Trappole misurate, non dedotte:**
+
+1. `/dl` è **byte-stabile** fra letture ravvicinate, quindi due letture identiche
+   provano che la copia è intera. Cambia solo quando cambia la configurazione
+   davvero (verificato: identico a 60 s e a 2 min, diverso dopo un salvataggio).
+2. La forma leggibile invece **era volatile** e produceva un commit al giorno.
+   I campi colpevoli sono stati trovati con due raccolte a 8 s di distanza che
+   differivano di **4 byte**: `Local` e `UTC` (l'orologio), oltre a uptime, heap
+   e contatori. A occhio il file sembrava identico.
+3. **`Sleep` e `Timezone` NON sono filtrati**, ed è deliberato: in Tasmota sono
+   *configurazione*, non telemetria. Filtrarli per assonanza con "stato"
+   cancellerebbe in silenzio ciò che serve a ricostruire il dispositivo — la
+   stessa trappola già documentata per la chiave `state` sugli Shelly.
+4. Verificato che **due raccolte consecutive producono file identici**.
+
+⚠️ **Il termostato è intermittente**: muto al ping alle 12:38, rispondeva su
+`/config` alle 13:06. Per questo la guardia è sullo **stato** e non sul
+cambiamento, con `conserva_precedenti`: un dispositivo che non risponde non deve
+sparire dal backup in silenzio.
+
+⚠️⚠️ **Sul termostato non si naviga.** Lo script legge solo endpoint
+inequivocabilmente informativi, con la lista dei vietati scritta accanto:
+WThermostat usa form con `method='get'`, e `/thermostat_reinit` e `/reset` **si
+eseguono con una GET**.
+
+⚠️ Il `.dmp` contiene chiave WiFi e credenziali MQTT. Verificato con
+`check-attr`: tutti e tre i file sono **cifrati** da git-crypt, nessuno in
+allowlist. Stato del repo dopo la raccolta: **116 file cifrati, 5 in chiaro**.
+
 ⚠️ **Il bridge NON contiene gli accoppiamenti Zigbee.** Fa solo da ponte
 seriale-su-TCP (porta 8888) verso il chip Zigbee; Home Assistant ci si collega
 con **Zigbee2MQTT**. Quindi l'artefatto che evita di riassociare tutto è
