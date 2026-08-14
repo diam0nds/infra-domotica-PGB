@@ -8,5 +8,8 @@ upgrade/**/*.bin
 upgrade/**/pacchetti/
 upgrade/**/target.manifest
 
-# Marcatore di guasto del backup: stato locale, non va versionato.
+# Marcatori di guasto: stato locale, non vanno versionati. Quello che invece
+# DEVE finire fuori casa e' hosts/pve/state/replica-casa.txt, che riporta la data
+# dell'ultima replica riuscita ed e' l'unico segnale visibile a macchina spenta.
 BACKUP-FALLITO.txt
+REPLICA-CASA-FALLITA.txt
