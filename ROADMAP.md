@@ -567,16 +567,20 @@ nemmeno il router li raggiunge — e Zigbee2MQTT crasha perdendo il coordinatore
 Il **bridge `br-iot`** resta la soluzione strutturale — un bridge esiste al boot
 indipendentemente dal WiFi — ed è il progetto VLAN già in elenco.
 
-⚠️ **Perché il router si riavvii non è noto.** Memoria a posto (48 MB liberi su
-119, nessun OOM). Almeno due riavvii il 2026-08-14, uno alle 12:18:41. Senza il
-punto 2 non si va avanti.
+✅ **Perché il router si riavviasse è chiarito**: l'utente stava facendo prove e
+ha staccato il cavo un paio di volte. **Nessun guasto.** Ma questo *aumenta* la
+priorità del punto 1: il guasto della rete IoT non era sfortuna, è la conseguenza
+**certa** di un evento normale — un blackout, un aggiornamento firmware, un
+intervento fisico. Su un sito non presidiato un blackout notturno lascerebbe la
+rete IoT morta per settimane.
 
-### PGB-AP irraggiungibile — verifica sul posto
+### ✅ PGB-AP — era scollegato, risolto il 2026-08-14
 
-`192.168.15.2` non risponde né al ping né a SSH: "No route to host", nessuna voce
-ARP, nessun lease. La raccolta lo segnala (`router-ap: NON raggiungibile via SSH,
-saltato`). Spento, guasto o scollegato: **la distinzione richiede una persona sul
-posto.** Il WiFi di casa nel frattempo regge sul solo router master.
+Era irraggiungibile perché **fisicamente scollegato** durante le prove
+dell'utente. Ricollegato e tornato da sé: ping 0,5 ms, SSH, OpenWrt 24.10.0.
+Nessun guasto. Lasciato a verbale perché la raccolta lo aveva segnalato
+correttamente (`router-ap: NON raggiungibile via SSH, saltato`) — il segnale ha
+funzionato.
 
 ### Stabilità degli Shelly — segnalato dall'utente il 2026-08-12
 

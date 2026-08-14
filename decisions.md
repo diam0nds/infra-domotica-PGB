@@ -727,7 +727,8 @@ raggiungibili, 17 voci ARP `FAILED`, Zigbee2MQTT in stato `error`**.
 
 ### La catena, dall'inizio
 
-1. **Il router si riavvia** (motivo sconosciuto, vedi sotto).
+1. **Il router si riavvia.** Causa poi chiarita dall'utente: stava facendo prove
+   e ha **staccato il cavo un paio di volte** quella mattina. Nessun guasto.
 2. Al boot **dnsmasq parte prima che salgano le radio WiFi**. La rete IoT vive
    direttamente su `phy0-ap0`, che in quel momento non esiste: il suo
    `dhcp-range` **non viene generato**, e nessuno lo ritenta dopo.
@@ -798,20 +799,46 @@ finche' qualcuno non riavvia dnsmasq, e dall'esterno si vede come dispositivi ch
 "cadono". Prima di cercare cause nei dispositivi, va installata la contromisura e
 riosservato il comportamento.
 
-### Cosa NON si sa, e perche'
+### CORREZIONE del 2026-08-14, poche ore dopo
 
-**Perche' il router si riavvia.** Memoria a posto (48 MB liberi su 119, nessun
-OOM), ma `log_file` non e' impostato e `log_size` e' 128 KB: il log tiene
-**quattro minuti** e la causa era gia' sovrascritta. Almeno due riavvii oggi, uno
-alle 12:18:41 in mezzo al lavoro.
+Avevo scritto che i riavvii del router erano di **causa ignota** e che serviva il
+log persistente per diagnosticarli. **Falso, e l'utente lo ha chiarito**: stava
+facendo prove e ha **staccato il cavo di alimentazione un paio di volte** quella
+mattina, al router Xiaomi e al dumb AP. `PGB-AP` era semplicemente **scollegato**,
+ed e' tornato da se': ping 0,5 ms, SSH, uptime 0 minuti, OpenWrt 24.10.0.
 
-Due contromisure proposte, **in attesa di approvazione**:
+Nessun guasto hardware, nessun riavvio spontaneo. Non cercare un difetto che non
+c'e'.
 
-1. **Log persistente verso il PVE via syslog** (`log_ip`), non su file locale: il
-   flash del router non va consumato, e la storia sopravvive ai riavvii.
-2. **Hotplug su ifup della rete IoT** che riavvii dnsmasq: trasforma un guasto
-   totale in un ritardo di secondi. Il bridge `br-iot` resta la soluzione
-   strutturale, questa si fa subito.
+### Ma il difetto vero non cambia — peggiora di priorita'
 
-**Nota**: `PGB-AP` (`192.168.15.2`) e' irraggiungibile — nemmeno al ping, "No
-route to host". Richiede una verifica sul posto.
+Se i riavvii erano deliberati, **il guasto della rete IoT non era un caso
+sfortunato: era la conseguenza certa di un evento normale.** E gli eventi che
+riavviano questo router non sono solo le prove dell'utente:
+
+- **i blackout**, che qui sono documentati e ricorrenti (vedi la questione del
+  BIOS `Restore on AC Power Loss`)
+- ogni aggiornamento del firmware
+- ogni intervento fisico
+
+Quindi la contromisura passa da "mitigazione di un guasto ignoto" a **"copertura
+di un evento che accadra' di nuovo con certezza"**. Su un sito normalmente non
+presidiato, un blackout notturno lascerebbe la rete IoT morta per settimane,
+senza che nulla lo dica — se non l'anomalia nel journal, che ora c'e'.
+
+**Contromisure, in attesa di approvazione:**
+
+1. **Hotplug su `ifup` della rete IoT** che riavvii `dnsmasq`. Chiude il difetto.
+   **E' questa la priorita'**, non il log.
+2. **Log persistente verso il PVE via syslog** (`log_ip`). Resta utile, ma non
+   serve piu' a inseguire un guasto: serve a non essere ciechi la prossima volta.
+
+Il bridge `br-iot` resta la soluzione strutturale (progetto VLAN): un bridge
+esiste al boot indipendentemente dal WiFi, quindi il problema non si porrebbe.
+
+### Conseguenza sulla mia obiezione all'esposizione
+
+Avevo detto di non riaprire la porta verso internet **perche' il router si
+riavviava da solo**. Quella premessa era sbagliata, e va ritirata: l'instabilita'
+non esisteva. Restano in piedi solo le ragioni originarie — casa non presidiata,
+2FA da attivare — non l'affidabilita' dell'apparato.
