@@ -842,3 +842,58 @@ Avevo detto di non riaprire la porta verso internet **perche' il router si
 riavviava da solo**. Quella premessa era sbagliata, e va ritirata: l'instabilita'
 non esisteva. Restano in piedi solo le ragioni originarie — casa non presidiata,
 2FA da attivare — non l'affidabilita' dell'apparato.
+
+## 2026-08-14 — Rotazione dei segreti che ho esposto: rinviata, non annullata
+
+**Decisione dell'utente**: tenere le rotazioni in **bassa priorita'**, si torna
+piu' avanti. Registrata qui perche' un segreto esposto e *dimenticato* e' peggio
+di uno esposto e tracciato: senza questa voce, la prossima sessione non saprebbe
+che esistono e ripartirebbe da zero.
+
+### Cosa e' stato esposto, e come
+
+Tre episodi, tutti in trascrizioni di sessione sotto `/root/.claude` (modo `700`,
+**non** replicate su GitHub: `collect-configs.sh` copia solo `memory/`).
+
+| Quando | Cosa | Come |
+|---|---|---|
+| 12 ago | **2 chiavi private WireGuard** (`wg0`, `wg_site_sbt`) | `uci show network` stampato senza redazione |
+| 12 ago | hostname DDNS di CASA e porta del tunnel | stessa lettura |
+| 14 ago | IP pubblico di PGB | `journalctl` di postfix, letto per diagnosi |
+| 14 ago | **chiave di rete Zigbee, link key dei 4 dispositivi, `tclk_seed`, credenziali MQTT** | `tail` del log di Zigbee2MQTT |
+
+### Perche' rinviare e' difendibile
+
+Il perimetro e' ristretto e misurato: nessuno dei segreti e' finito nel repo su
+GitHub, e le trascrizioni stanno in una directory `700` su un host che non e'
+esposto (gli inoltri verso il PVE sono stati rimossi, la zona IoT non raggiunge
+la LAN). La superficie e' LAN piu' VPN.
+
+Il costo della rotazione non e' invece trascurabile, ed e' il motivo per cui
+merita una finestra dedicata invece di essere infilata in coda a un'altra sessione:
+
+- `wg0`: rigenerare piu' aggiornare **3 client** road-warrior
+- `wg_site_sbt`: richiede di cambiare la pubkey del peer **su OPNsense**, cioe'
+  in una sessione su CASA, coordinata — sbagliando l'ordine si taglia il tunnel
+  verso la casa vuota
+- chiave di rete Zigbee: **riaccoppiare i 4 dispositivi** (poco, ma va fatto sul
+  posto)
+- credenziali MQTT: toccano Z2M e il termostato, da fare nella stessa finestra
+
+### Quando smette di essere difendibile
+
+Da rivedere **subito**, senza aspettare la coda, se si verifica una di queste:
+
+1. Si apre un accesso dall'esterno verso il PVE o verso HA (la 443 e' stata
+   aperta il 12 agosto: se si aggiungono altri inoltri, il perimetro cambia)
+2. Una persona in piu' ottiene accesso a questo host
+3. Le trascrizioni vengono copiate fuori dalla macchina, per qualunque motivo
+4. Si sospetta un accesso non autorizzato al tunnel o alla rete Zigbee
+
+### Il difetto di metodo, che invece e' stato corretto subito
+
+Il punto non e' il campo dimenticato, e' il **metodo**: tre volte su tre ho
+filtrato per lista di cio' che volevo nascondere, e tre volte era incompleta.
+La regola sta in `infra-common/GESTIONE-SEGRETI.md`, che e' stato aggiornato con
+le due lezioni nuove — il base64 che vanifica la redazione per nome di campo, e
+i log di Zigbee2MQTT che contengono l'intero backup del coordinatore.
