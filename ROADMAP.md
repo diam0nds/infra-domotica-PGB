@@ -546,10 +546,49 @@ propria configurazione, separata da quella del server.
    salire sull'SSID di casa. I tunnel dell'infrastruttura non sono toccati: il
    site-to-site punta al nome di **CASA**.
 
+### ⚠️ Rete IoT: il DHCP non sopravvive a un riavvio del router — DA CHIUDERE
+
+**Trovato il 2026-08-14 con la rete IoT giù da almeno due giorni.** Ripristinata,
+ma la causa è aperta e si ripresenta **a ogni riavvio del router**.
+
+Al boot `dnsmasq` parte prima delle radio WiFi. La rete IoT vive direttamente su
+`phy0-ap0`, che allora non esiste: il `dhcp-range` non viene generato e nessuno
+lo ritenta. I dispositivi si associano ma non ottengono un indirizzo — quindi
+nemmeno il router li raggiunge — e Zigbee2MQTT crasha perdendo il coordinatore.
+
+**Due contromisure, in attesa di approvazione dell'utente:**
+
+1. **Hotplug su `ifup` della rete IoT** che riavvii `dnsmasq`. Piccola, mirata,
+   trasforma un guasto totale in un ritardo di secondi. **Da fare subito.**
+2. **Log persistente verso il PVE via syslog** (`log_ip`), non su file locale per
+   non consumare il flash. Senza, la causa dei riavvii non è diagnosticabile: il
+   log tiene **quattro minuti** (`log_size` 128 KB, solo RAM).
+
+Il **bridge `br-iot`** resta la soluzione strutturale — un bridge esiste al boot
+indipendentemente dal WiFi — ed è il progetto VLAN già in elenco.
+
+⚠️ **Perché il router si riavvii non è noto.** Memoria a posto (48 MB liberi su
+119, nessun OOM). Almeno due riavvii il 2026-08-14, uno alle 12:18:41. Senza il
+punto 2 non si va avanti.
+
+### PGB-AP irraggiungibile — verifica sul posto
+
+`192.168.15.2` non risponde né al ping né a SSH: "No route to host", nessuna voce
+ARP, nessun lease. La raccolta lo segnala (`router-ap: NON raggiungibile via SSH,
+saltato`). Spento, guasto o scollegato: **la distinzione richiede una persona sul
+posto.** Il WiFi di casa nel frattempo regge sul solo router master.
+
 ### Stabilità degli Shelly — segnalato dall'utente il 2026-08-12
 
 **L'utente riferisce che gli Shelly non sono molto stabili, e che lo Shelly EM in
 particolare è difettoso e perde spesso la connessione.**
+
+🔎 **Ipotesi nuova del 2026-08-14, prima di cercare cause nei dispositivi.** Quel
+giorno `CORR-SHELLY-EM` è stato **raccolto per la prima volta**: da "non risponde
+mai" a raggiungibile appena il DHCP della rete IoT è tornato. Una parte di quella
+instabilità potrebbe essere il difetto descritto qui sopra — ogni riavvio del
+router azzera silenziosamente la rete IoT, e dall'esterno si vede come
+dispositivi che cadono. **Installare prima la contromisura, poi riosservare.**
 
 Riscontri già in mano, da non ripartire da zero:
 

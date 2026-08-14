@@ -719,3 +719,99 @@ Nota storica emersa dalle date: i token del 2022 puntano a
 Assistant ha quindi vissuto **prima sulla rete di CASA**, poi su un altro
 indirizzo di PGB, prima dell'attuale `192.168.15.4`. Utile sapere che l'impianto
 e' stato migrato, quando si guarderanno configurazioni vecchie.
+
+## 2026-08-14 — La rete IoT giu' per due giorni: causa, catena e due difetti miei
+
+**Sessione presidiata.** Trovato riprendendo il lavoro: **zero Shelly
+raggiungibili, 17 voci ARP `FAILED`, Zigbee2MQTT in stato `error`**.
+
+### La catena, dall'inizio
+
+1. **Il router si riavvia** (motivo sconosciuto, vedi sotto).
+2. Al boot **dnsmasq parte prima che salgano le radio WiFi**. La rete IoT vive
+   direttamente su `phy0-ap0`, che in quel momento non esiste: il suo
+   `dhcp-range` **non viene generato**, e nessuno lo ritenta dopo.
+3. I dispositivi si associano correttamente — 16 su 16 autorizzate, handshake WPA
+   completo — ma **nessuno ottiene un indirizzo**. Senza indirizzo non c'e' ARP,
+   quindi nemmeno il router li raggiunge.
+4. **Zigbee2MQTT perde il socket** verso il coordinatore `192.168.16.10:8888`,
+   crasha su un errore secondario del suo logger (`write after end` in winston) e
+   resta in `error`. La rete Zigbee non e' gestita da nessuno.
+
+E' la fragilita' prevista dal progetto VLAN: **la rete IoT sull'interfaccia
+wireless invece che su un bridge**. Un bridge esiste al boot indipendentemente
+dal WiFi; un'interfaccia AP no.
+
+### Ripristino
+
+`/etc/init.d/dnsmasq restart` (rigenera il range ora che l'interfaccia esiste),
+deautenticazione delle stazioni per forzare il DHCP, `ha addons restart` di
+Zigbee2MQTT. Esito: **17 lease, 12 Shelly su 12, bridge Zigbee risponde, 4
+dispositivi Zigbee di nuovo online**.
+
+⚠️ **`bridge_connection_state` in Home Assistant diceva `on` mentre Z2M era
+morto**: era un messaggio MQTT **retained**, l'ultimo pubblicato prima di
+crashare. Il segnale che smaschera la bugia sono le entita' `linkquality`: zero
+significa nessun dispositivo Zigbee esposto. **Non fidarsi di uno stato retained
+per giudicare se un servizio e' vivo.**
+
+### Difetto mio numero 1: una guardia che vede i cambiamenti non vede gli stati
+
+La raccolta notturna **aveva rilevato** il guasto e scriveva `shelly: 0
+dispositivi raccolti (nella raccolta precedente: 0)`. Nessun avviso, perche' la
+guardia confrontava solo la **transizione** (`-lt`): dopo il primo giro a zero ha
+taciuto per sempre. Il guasto e' diventato invisibile proprio quando era totale.
+
+Corretto: due controlli distinti, uno sullo **stato** (zero e' sempre anomalia) e
+uno sulla **transizione** (un calo parziale indica dispositivi singoli). Nuova
+funzione `anomalia()`, che scrive nel journal con tag `infra-backup` — canale che
+`CLAUDE.md` prescrive di leggere a inizio sessione — e **non** scrive
+`BACKUP-FALLITO.txt`, che significa un'altra cosa: quello dice "la copia fuori
+casa e' vecchia", qui la copia era aggiornata ed era il contenuto a mancare.
+
+Ha funzionato al primo giro su un guasto vero: ha intercettato l'export Zigbee
+scaduto.
+
+### Difetto mio numero 2: un backup che cancella da solo
+
+`rm -rf "$REPO/guests"` prima della raccolta e' giusto per VM e container, ma per
+i dispositivi e' una trappola. **La perdita si e' materializzata**: il commit
+`0e06c8f` delle 09:22 ha cancellato `coordinator_backup.json` da HEAD, e l'ultima
+copia buona e' rimasta solo nella storia — da cercare con `git log` proprio quando
+si e' di fretta. Idem per tutti gli 11 Shelly.
+
+Corretto con `conserva_precedenti()`: cio' che git conosce e la raccolta non
+riproduce viene ripristinato dall'indice, con anomalia che avverte che quella
+copia e' **vecchia** (per lo Zigbee, con avviso esplicito sul `frame_counter` non
+aggiornato). **La cancellazione e' una decisione, non l'effetto collaterale di un
+guasto di rete**: un dispositivo dismesso si toglie a mano.
+
+### Ipotesi nuova sull'"instabilita' degli Shelly"
+
+L'utente riferisce da tempo che gli Shelly sono instabili e che l'EM perde spesso
+la connessione. **Oggi `CORR-SHELLY-EM` e' stato raccolto per la prima volta**: da
+guasto e' passato a raggiungibile appena il DHCP e' tornato.
+
+Ipotesi forte, non ancora dimostrata: **una parte di quella "instabilita'" e'
+questo difetto.** Ogni riavvio del router azzera silenziosamente la rete IoT
+finche' qualcuno non riavvia dnsmasq, e dall'esterno si vede come dispositivi che
+"cadono". Prima di cercare cause nei dispositivi, va installata la contromisura e
+riosservato il comportamento.
+
+### Cosa NON si sa, e perche'
+
+**Perche' il router si riavvia.** Memoria a posto (48 MB liberi su 119, nessun
+OOM), ma `log_file` non e' impostato e `log_size` e' 128 KB: il log tiene
+**quattro minuti** e la causa era gia' sovrascritta. Almeno due riavvii oggi, uno
+alle 12:18:41 in mezzo al lavoro.
+
+Due contromisure proposte, **in attesa di approvazione**:
+
+1. **Log persistente verso il PVE via syslog** (`log_ip`), non su file locale: il
+   flash del router non va consumato, e la storia sopravvive ai riavvii.
+2. **Hotplug su ifup della rete IoT** che riavvii dnsmasq: trasforma un guasto
+   totale in un ritardo di secondi. Il bridge `br-iot` resta la soluzione
+   strutturale, questa si fa subito.
+
+**Nota**: `PGB-AP` (`192.168.15.2`) e' irraggiungibile — nemmeno al ping, "No
+route to host". Richiede una verifica sul posto.
