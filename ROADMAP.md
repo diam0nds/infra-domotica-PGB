@@ -546,7 +546,7 @@ propria configurazione, separata da quella del server.
    salire sull'SSID di casa. I tunnel dell'infrastruttura non sono toccati: il
    site-to-site punta al nome di **CASA**.
 
-### ⚠️ Rete IoT: il DHCP non sopravvive a un riavvio del router — DA CHIUDERE
+### ✅ Rete IoT: il DHCP ora sopravvive a un riavvio — CHIUSO 2026-08-14
 
 **Trovato il 2026-08-14 con la rete IoT giù da almeno due giorni.** Ripristinata,
 ma la causa è aperta e si ripresenta **a ogni riavvio del router**.
@@ -556,13 +556,33 @@ Al boot `dnsmasq` parte prima delle radio WiFi. La rete IoT vive direttamente su
 lo ritenta. I dispositivi si associano ma non ottengono un indirizzo — quindi
 nemmeno il router li raggiunge — e Zigbee2MQTT crasha perdendo il coordinatore.
 
-**Due contromisure, in attesa di approvazione dell'utente:**
+**✅ Fatto**: `/etc/hotplug.d/iface/99-dnsmasq-iot` su PGB-GW (sorgente in
+`infra-common/scripts/router/hotplug-dnsmasq-iot.sh`). Quando la rete IoT sale,
+controlla se `dnsmasq` ha davvero il suo `dhcp-range` e lo riavvia **solo se
+manca**. Idempotente, e logga sempre con tag `dnsmasq-iot`.
 
-1. **Hotplug su `ifup` della rete IoT** che riavvii `dnsmasq`. Piccola, mirata,
-   trasforma un guasto totale in un ritardo di secondi. **Da fare subito.**
-2. **Log persistente verso il PVE via syslog** (`log_ip`), non su file locale per
-   non consumare il flash. Senza, la causa dei riavvii non è diagnosticabile: il
-   log tiene **quattro minuti** (`log_size` 128 KB, solo RAM).
+**Tre percorsi verificati, non dedotti:**
+
+| Condizione | Esito osservato |
+|---|---|
+| rete sana | `dhcp-range gia' presente, nessuna azione` |
+| altra interfaccia | esce muto |
+| **range assente** | `ASSENTE … riavvio dnsmasq` → `OK, dhcp-range ripristinato` |
+
+⚠️ **Il primo tentativo di test era riuscito senza provare nulla**: con
+`ifdown`/`ifup` è il meccanismo interno di OpenWrt a ripristinare il range, e il
+rimedio non entrava mai in azione (loggava "già presente"). Il percorso di
+riparazione è stato isolato rendendo il range assente **a interfaccia su**, con un
+flag `dhcp.IoT.ignore` temporaneo — senza interrompere la rete.
+
+**Resta da valutare** una rete di sicurezza indipendente dall'ordine degli eventi
+al boot: se l'evento `ifup` arriva *prima* che dnsmasq parta, lo script esce
+correttamente senza fare nulla e ci si affida al fatto che dnsmasq, partendo dopo,
+trovi l'interfaccia già su. Una verifica ritardata in `rc.local`, o un controllo
+periodico da cron (un `grep`, nessun agente), chiuderebbe anche quella finestra.
+
+**Log persistente verso il PVE via syslog** (`log_ip`): resta utile per non essere
+ciechi la prossima volta, ma non è più urgente — la causa dei riavvii è nota.
 
 Il **bridge `br-iot`** resta la soluzione strutturale — un bridge esiste al boot
 indipendentemente dal WiFi — ed è il progetto VLAN già in elenco.
