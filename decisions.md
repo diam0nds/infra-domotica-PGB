@@ -1157,3 +1157,66 @@ anche a un aggiornamento di firmware.
 copia fallisce con `/usr/libexec/sftp-server: not found`. Si usa
 `ssh <host> "cat > /percorso"`. Stessa famiglia di `paste` e `timeout` assenti
 (§12-bis): prima di dare per scontato uno strumento, verificare che esista.
+
+## 2026-08-16 — DDNS spostato sul router: il servizio che serve a rientrare non puo' stare sulla macchina che muore
+
+**Sessione presidiata.** Voce 1-bis della roadmap, aperta dall'11 agosto.
+
+### Il problema, ricordato in una riga
+
+L'hostname con cui PGB si pubblica era aggiornato da un add-on dentro Home
+Assistant, che gira sulla VM 100, che gira sul PVE, che dopo un blackout resta
+spento per giorni. Il servizio che serve a **rientrare** dipendeva dalla macchina
+che muore. Cronologia del 9 agosto: blackout alle 03:30, IP pubblico nuovo alle
+04:00, record aggiornato solo l'11 alle 10:07 — due giorni di irraggiungibilita'.
+
+### Cosa e' stato installato
+
+`ddns-scripts` 2.8.2 sul router master, che e' sempre acceso e riparte da solo.
+72 KB in overlay su 6,9 MB liberi. Sezione uci **nominata** `duckdns_pgb`.
+L'add-on su Home Assistant **resta attivo come ridondanza**: due aggiornatori
+sullo stesso record spingono lo stesso IP, non danno fastidio.
+
+### Quattro correzioni rispetto alla configurazione ovvia
+
+1. **`ip_source='web'`, non l'IP dell'interfaccia.** La WAN del router e'
+   `192.168.51.2`: doppio NAT. Prendendo l'IP dall'interfaccia si pubblicherebbe
+   un indirizzo privato, e il record sarebbe inutile senza che nulla segnali un
+   errore. Aggiunto anche `upd_privateip='0'` come rete di sicurezza.
+2. **`ip_url='https://api.ipify.org'`.** Il default suggerito in giro e'
+   `checkip.duckdns.org`, che **non e' un servizio ufficiale**: `checkip` e' un <!-- no-secrets-ok: sottodominio di terzi citato come controesempio, non e' il nostro endpoint DDNS -->
+   sottodominio che chiunque puo' registrare su DuckDNS, e infatti risolve a un
+   indirizzo di terzi che non c'entra nulla. Misurato: fallisce sia in HTTP sia
+   in HTTPS, mentre `api.ipify.org` risponde.
+3. **`update_url` riscritto in HTTPS.** La definizione di serie del pacchetto
+   (`/usr/share/ddns/default/duckdns.org.json`) usa **HTTP**: manderebbe il token
+   in chiaro su internet. Sovrascritta nella sezione, con
+   `cacert='/etc/ssl/certs/ca-certificates.crt'` — il percorso `/etc/ssl/certs`
+   da solo fa fallire con `No valid certificate file`.
+4. **`dns_server='1.1.1.1'`, ed e' la correzione meno ovvia.** `ddns-scripts`
+   scopre "quale IP e' registrato" risolvendo `lookup_host` con il **DNS locale**.
+   Ma dall'11 agosto esiste uno split DNS che fa risolvere quel nome a
+   `192.168.15.4` (Home Assistant) per avere un solo URL dentro e fuori casa.
+   Il risultato sarebbe stato: IP registrato letto come `192.168.15.4`, mismatch
+   perenne, e **un aggiornamento spinto ogni 5 minuti per sempre**. Due funzioni
+   entrambe corrette che insieme producono un guasto silenzioso.
+
+### Verificato, non dichiarato
+
+Primo avvio: `Update needed`, `DDNS Provider answered: OK`, `Update successful` —
+e il mismatch era **vero**, il record era disallineato dall'IP reale nel momento
+in cui l'abbiamo guardato. Il guasto colto sul fatto.
+
+Dopo la correzione 4, a regime: `Registered IP` e `Current IP` coincidono,
+**nessuna riga `Update needed`**, attesa di 300 s. Nessuna tempesta.
+
+Controllo incrociato sui resolver: da `1.1.1.1` il nome risolve all'IP pubblico
+corrente, dal DNS locale a `192.168.15.4`. Entrambi corretti, ed e' esattamente
+cio' che lo split DNS deve fare.
+
+Servizio abilitato al boot (`S95ddns`), config in `/etc/config/ddns` con modo
+`600`, raccolta dal backup notturno e **cifrata** (verificato con `check-attr`).
+
+⚠️ Il token e' stato letto dalla configurazione dell'add-on e scritto sul router
+**passando per stdin**, mai come argomento di un comando: `/proc/<pid>/cmdline`
+e' leggibile da chiunque sul sistema.
