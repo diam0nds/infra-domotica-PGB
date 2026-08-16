@@ -947,7 +947,7 @@ Bloccata anche la 443 verso gli indirizzi dei resolver pubblici noti — nessuno
 naviga legittimamente su `8.8.8.8:443`.
 
 ⚠️ **Trappola schivata per una cifra.** L'upstream di AdGuard e'
-`dns10.quad9.net`, che risolve a **9.9.9.10** e **149.112.112.10**; nella lista
+`dns10.quad9.net`, che risolve a **9.9.9.10** e **149.112.112.10**; nella lista <!-- no-secrets-ok: resolver pubblici Quad9, infrastruttura nota, non rivelano nulla del sito -->
 bloccata ci sono **9.9.9.9** e **149.112.112.112**. Se avesse usato
 `dns.quad9.net` invece di `dns10`, il blocco avrebbe tolto il DNS a tutta la
 casa. **Verificato dopo l'applicazione, e andava verificato prima.**
