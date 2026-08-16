@@ -1083,3 +1083,77 @@ scarse": e' che non sono la leva giusta per questo problema.
 E vale il punto della guida che il DNS non puo' risolvere: **le pubblicita' di
 YouTube arrivano dallo stesso dominio del video**. Nessuna lista potra' mai
 separarle: serve un blocco nel browser.
+
+## 2026-08-16 — CASA raggiunge tutta la rete di PGB: due forwarding, non una lista di host
+
+**Sessione presidiata.** Richiesta dell'utente: da CASA si arrivava solo a
+`192.168.15.1` e serviva raggiungere tutta la rete di PGB.
+
+### Perche' ci si fermava al router
+
+Non era un problema di rotte ne' di allowed IPs: la zona `s2sVPN` aveva
+`input='ACCEPT'` e `forward='REJECT'`. Il router accettava il traffico **diretto
+a se'** — da cui il ping a `.1` — e rifiutava di **inoltrarlo** verso gli altri
+host. Mancavano i forwarding fra zone.
+
+### Cosa e' stato scelto, e perche' non una regola puntuale
+
+Aggiunti due forwarding **nominati**, non anonimi (gli indici `@forwarding[N]` si
+rinumerano a ogni cancellazione, §12):
+
+    firewall.s2s_to_lan   s2sVPN -> lan
+    firewall.s2s_to_iot   s2sVPN -> IoTZone
+
+Il criterio non e' "aprire tutto" ma **replicare a `s2sVPN` i privilegi che la
+zona `lan` ha gia'**. La politica di PGB dice: la LAN raggiunge la IoT, la IoT
+non raggiunge la LAN. Se CASA e' un'estensione della rete di gestione — ed e' cio'
+che significa "raggiungere tutta la rete PGB" — darle gli stessi permessi della
+LAN e' **consistente** con la segmentazione esistente, non un allargamento.
+
+**Scartata la regola puntuale verso il solo `192.168.15.4`**: con l'integrazione
+delle due domotiche come obiettivo, una lista di host diventa stantia e va
+manutenuta a mano.
+
+### Cio' che NON e' stato fatto, ed e' la meta' che conta
+
+**Nessun `IoTZone -> s2sVPN`.** I dispositivi IoT non devono poter *iniziare*
+connessioni verso CASA. Verificato dopo la modifica che `forward_IoTZone`
+contenga solo l'eccezione preesistente verso `192.168.15.4`, `accept_to_wan` e il
+reject finale. Il forwarding di OpenWrt e' direzionale e con stato: `s2sVPN ->
+IoTZone` permette a CASA di raggiungerli e alle risposte di tornare, senza dare
+loro una via d'uscita.
+
+### Verifiche, una modifica per volta con prova sul campo in mezzo
+
+Prima modifica, poi collaudo **dall'utente da CASA**: da `192.168.10.6` rispondono
+al ping `192.168.15.1`, `.2`, `.4` e `.5` — router, AP, Home Assistant e PVE.
+Solo dopo la seconda modifica.
+
+Per entrambe: `safe-change arm firewall 600`, verifica che la regola sia nel
+**ruleset nftables** e non solo in uci, che i due tunnel abbiano handshake recente
+e contatori in crescita (il DNAT aveva gia' rotto la site-to-site l'8 agosto), che
+il DNS risponda e che la domotica IoT sia ancora raggiungibile. Poi `confirm`.
+
+### Resta da fare sull'altro lato
+
+La VLAN IoT non e' ancora raggiungibile da CASA: gli allowed IPs del peer PGB su
+**OPNsense** non includono `192.168.16.0/24`. La meta' di PGB e' completa, quella
+di CASA va fatta **in una sessione su CASA**. La LAN `192.168.15.0/24` c'era gia',
+altrimenti non avrebbe risposto nemmeno `.1`.
+
+### Scoperta collaterale: il paracadute non era agganciato
+
+`safe-change.sh` **non era installato sul router**. Il protocollo che il
+MODUS-OPERANDI chiama obbligatorio si appoggiava a uno script che sul bersaglio
+non esisteva: le sessioni precedenti lo copiavano presumibilmente in `/tmp`, che
+su OpenWrt e' in RAM, e il riavvio del 14 agosto l'ha cancellato insieme alla rete
+di sicurezza.
+
+Installato in `/usr/bin/safe-change` (stessa convenzione di `dns-watchdog`),
+verificato per checksum e **aggiunto a `/etc/sysupgrade.conf`**, cosi' sopravvive
+anche a un aggiornamento di firmware.
+
+⚠️ **`scp` non funziona verso questi router**: dropbear non ha `sftp-server` e la
+copia fallisce con `/usr/libexec/sftp-server: not found`. Si usa
+`ssh <host> "cat > /percorso"`. Stessa famiglia di `paste` e `timeout` assenti
+(§12-bis): prima di dare per scontato uno strumento, verificare che esista.
