@@ -996,3 +996,90 @@ restare vivi: tutti risolti. AdGuard ripartito, DNS funzionante.
 - `datadoghq.com`: **10.903 query in quattro mesi**, `browser-intake` bloccato
   ma `http-intake` passa. Non bloccato: non si sa quale dispositivo sia e
   l'impatto e' ignoto. Da identificare.
+
+## 2026-08-16 — Liste AdGuard scelte misurando, non per reputazione
+
+**Sessione presidiata.** L'utente ha portato una guida che raccomanda AdGuard DNS
+filter + OISD (Big o Small) + HaGeZi Multi Pro + StevenBlack. Invece di
+accettarla o rifiutarla, e' stata **messa alla prova sui 18 domini reali** trovati
+nel registro delle query di questa casa.
+
+### La misura
+
+| Combinazione | Regole | Copertura |
+|---|---|---|
+| AdGuard DNS filter da sola | 155.537 | **4/18** |
+| + Smart-TV [7] + Xiaomi [60] | 155.977 *(+440)* | **9/18** |
+| + anche HaGeZi Pro [48] | 296.276 | 10/18 |
+| + OISD Big [27] *(la guida)* | 366.306 | **4/18** |
+| + OISD Big + HaGeZi Pro *(la guida)* | 471.116 | **7/18** |
+
+**Quattrocentoquaranta regole mirate raddoppiano la copertura; la pila della
+guida, tre volte piu' pesante, copre meno.** La Smart-TV con **141 regole** copre
+quanto HaGeZi Pro con 216.000.
+
+### Perche' OISD non serve a questo scopo (e non e' un difetto)
+
+OISD e' costruita su "zero falsi positivi": non blocca nulla che possa rompere
+un'app. Ma la telemetria di un produttore e' intrecciata con l'app di quel
+produttore, quindi OISD la lascia passare **per progetto**. Ottima per togliere
+pubblicita' senza rischi, inadatta a minimizzare i dati degli elettrodomestici.
+Sono due obiettivi diversi.
+
+### Falso positivo misurato, non ipotizzato
+
+**HaGeZi Normal e Pro bloccano `eic-ngfts.lge.com`**, il dominio degli
+aggiornamenti firmware della TV. Seguendo la guida senza verificare, il
+televisore avrebbe smesso di ricevere patch di sicurezza in silenzio. Inserite
+`@@||ngfts.lge.com^` e `@@||eic-ngfts.lge.com^` come assicurazione, cosi' se un
+giorno si aggiungera' HaGeZi il problema non si presentera'.
+
+### Cosa e' stato fatto
+
+Aggiunte **[7] Perflyst Smart-TV** (4,3 KB) e **[60] HaGeZi Xiaomi Tracker**
+(9,7 KB). Non aggiunte: [61] Samsung (**0/18**, nessun dispositivo Samsung
+rilevante), OISD (3-4/18), StevenBlack (ridondante).
+
+Delle 12 regole scritte a mano il 2026-08-16, **solo 3 sono diventate ridondanti**
+(`alphonso.tv`, `lgsmartad.com`, `lgtvcommon.com`, ora coperte dalla [7]). Le
+altre 9 restano perche' nessuna lista pubblica le copre:
+
+- **LG**: le liste non le bloccano perche' romperebbero l'app LG a chiunque. Qui
+  si puo' perche' Home Assistant comanda la TV in locale via HomeKit.
+- **HbbTV italiano**: nessuna lista internazionale includera' mai
+  `hbbtv.mediaset.net` e i due endpoint del datalake Mediaset.
+
+### Il modello che ne esce, in tre strati
+
+1. **Base generalista** — copre il tracciamento web comune
+2. **Liste mirate ai dispositivi che ci sono davvero** — 440 regole, il maggior
+   guadagno per byte speso. Non aggiungere liste per hardware che non si possiede.
+3. **Poche regole locali a mano** — cio' che le liste evitano apposta, e le
+   specificita' nazionali
+
+### Verifica
+
+Sul resolver vivo: **16/18 bloccati**. I due che passano sono esclusi di
+proposito — `fr.app.chat.global.xiaomi.net` (messaggistica push: bloccarla
+spegnerebbe le notifiche del robot) e `http-intake.logs.us5.datadoghq.com` (e' il
+CLI di Claude Code su questo PVE, scelta dell'utente).
+
+Otto domini funzionali verificati vivi con indirizzi reali: firmware LG, i quattro
+del Dreame, lo storage Alibaba e lo streaming Mediaset.
+
+⚠️ **Il primo controllo dei domini funzionali era difettoso**: leggeva
+`192.168.15.3#53`, cioe' la riga del *server* nell'output di `nslookup`, non la
+risposta — un dominio bloccato avrebbe superato il controllo. Rifatto con
+`getent ahostsv4` **e con una controprova**: due domini noti come bloccati devono
+risultare irrisolti, e risultano. Un metodo di verifica va validato su un caso
+negativo, non solo su quelli che ci si aspetta passino.
+
+### Limite di questa misura, dichiarato
+
+I 18 domini misurano **l'obiettivo TV/IoT**, non il tracciamento web generico,
+dove OISD e HaGeZi lavorano bene. La conclusione non e' "quelle liste sono
+scarse": e' che non sono la leva giusta per questo problema.
+
+E vale il punto della guida che il DNS non puo' risolvere: **le pubblicita' di
+YouTube arrivano dallo stesso dominio del video**. Nessuna lista potra' mai
+separarle: serve un blocco nel browser.
