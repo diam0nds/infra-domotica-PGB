@@ -897,3 +897,102 @@ filtrato per lista di cio' che volevo nascondere, e tre volte era incompleta.
 La regola sta in `infra-common/GESTIONE-SEGRETI.md`, che e' stato aggiornato con
 le due lezioni nuove — il base64 che vanifica la redazione per nome di campo, e
 i log di Zigbee2MQTT che contengono l'intero backup del coordinatore.
+
+## 2026-08-16 — Bonifica smart TV: prima si chiude la via di fuga, poi si filtra
+
+**Sessione presidiata. Richiesto dall'utente**: bloccare la telemetria delle TV
+**a livello di rete**, senza toccare le impostazioni dei televisori.
+
+### La scoperta che ha ribaltato l'ordine di lavoro
+
+Misurando il traffico con le TV accese:
+
+```
+udp  src=192.168.15.164  dst=8.8.8.8  dport=53
+```
+
+**La TV LG interrogava il DNS di Google in parallelo a quello locale.** Un
+controllo precedente non l'aveva vista perche' la TV era inattiva: il
+comportamento si manifesta quando lavora.
+
+Conseguenza: **finche' un dispositivo puo' scegliere il proprio resolver, ogni
+regola di filtraggio e' facoltativa dal suo punto di vista.** Perfezionare le
+liste prima di chiudere quella via sarebbe stato inutile.
+
+### 1. Dirottamento DNS (la chiave di volta)
+
+Due `redirect` DNAT su PGB-GW: tutta la porta 53 in uscita da `lan` e `IoTZone`
+finisce sul resolver locale. Il dispositivo crede di parlare con Google e riceve
+le risposte di AdGuard.
+
+⚠️ **AdGuard e' escluso** (`src_ip='!192.168.15.3'`): usa DoH su 443, ma per
+risolvere il nome del server DoH fa una query **bootstrap sulla 53**. Senza
+esclusione: AdGuard -> dnsmasq -> AdGuard, anello.
+
+Verificato in modo funzionale, non guardando le regole:
+
+| Prova | Esito |
+|---|---|
+| `nslookup prov-lg.alphonso.tv 8.8.8.8` | **NXDOMAIN** — risponde AdGuard |
+| 5 resolver esterni diversi | tutti la stessa risposta locale |
+| contatore regola `lan` | 9 -> 19 pacchetti durante la prova |
+| contatore regola `IoT` | **gia' a 5 prima della prova**: anche la seconda TV ci provava |
+
+### 2. DoT e DoH dei resolver noti
+
+`REJECT` (non `DROP`) sulla 853: il client fallisce subito e ripiega sulla 53,
+che dirottiamo. Con `DROP` resterebbe appeso a ritentare.
+
+Bloccata anche la 443 verso gli indirizzi dei resolver pubblici noti — nessuno
+naviga legittimamente su `8.8.8.8:443`.
+
+⚠️ **Trappola schivata per una cifra.** L'upstream di AdGuard e'
+`dns10.quad9.net`, che risolve a **9.9.9.10** e **149.112.112.10**; nella lista
+bloccata ci sono **9.9.9.9** e **149.112.112.112**. Se avesse usato
+`dns.quad9.net` invece di `dns10`, il blocco avrebbe tolto il DNS a tutta la
+casa. **Verificato dopo l'applicazione, e andava verificato prima.**
+
+### 3. Regole in AdGuard
+
+Prima c'erano **zero** regole personalizzate e una sola lista attiva.
+
+Bloccati: `alphonso.tv` (ACR), `lgsmartad.com`, `lgtvcommon.com` (CDP, beacon,
+nudge, recommend), `lgtviot.com`, `lgsmartplatform.com`, `nextlgsdp.com`,
+`lgtvsdp.com`, `snu.lge.com`, `lgtvonline.lge.com`.
+
+**Non bloccato di proposito**: `ngfts.lge.com` e `eic-ngfts.lge.com` sono
+firmware e immagini. Bloccarli significa niente aggiornamenti di sicurezza, che
+e' un peggioramento netto. Per questo non si blocca `lge.com` all'ingrosso.
+
+`lgtviot.com` (cloud ThinQ) e' bloccabile perche' Home Assistant comanda la TV
+**in locale via HomeKit** — verificato: `media_player.lg_webos_tv_883d` e
+l'integrazione `homekit_controller` caricata. L'utente usa l'app LG solo come
+telecomando di riserva e ne fa a meno.
+
+### 4. HbbTV: il banner dei cookie del digitale terrestre
+
+Il banner e' un'**applicazione web trasmessa insieme al canale**. Misurato sul
+canale 35 (Focus, Mediaset): `hbbtv.mediaset.net` carica l'app, che contatta
+`enabler.datalake.mediaset.it` e `data-enabler-cloud.mediaset.net` — i nomi
+dicono da soli cosa fanno — piu' `securepubads.g.doubleclick.net`, gia' bloccato.
+
+Bloccati i tre. **Non** e' bloccato `mediaset.it` all'ingrosso, per non rompere
+l'app Infinity: verificato che `www.mediasetplay.mediaset.it` risolva ancora.
+
+Per le altre emittenti servira' osservare il log: RAI e Discovery hanno i propri
+endpoint, che compariranno quando quei canali verranno guardati.
+
+### Verifica finale
+
+Cinque domini nuovi provati uno per uno: tutti NXDOMAIN. Tre domini che devono
+restare vivi: tutti risolti. AdGuard ripartito, DNS funzionante.
+
+### Cosa questo NON copre
+
+- **Indirizzi scritti in duro nel firmware**: il DNS non li vede. Servirebbe il
+  blocco in uscita per destinazione, che e' il default-deny gia' in roadmap.
+- **DoH verso host non noti**: gira sulla 443 verso nomi qualsiasi. Il
+  dirottamento della 53 e il blocco dei resolver noti coprono i casi comuni.
+- `datadoghq.com`: **10.903 query in quattro mesi**, `browser-intake` bloccato
+  ma `http-intake` passa. Non bloccato: non si sa quale dispositivo sia e
+  l'impatto e' ignoto. Da identificare.
